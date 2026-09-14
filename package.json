@@ -1,0 +1,22 @@
+{
+  "name": "crime-data-analytics",
+  "version": "1.0.0",
+  "description": "Crime Data Analytics - Comprehensive National Intelligence & Regional Crime Analytics Web Application",
+  "scripts": {
+    "render-build": "cd client && npm install && npm run build && cd ../server && npm install && npm run build",
+    "build": "cd client && npm install && npm run build && cd ../server && npm install && npm run build",
+    "start": "cd server && npm start",
+    "seed": "cd server && npm run seed",
+    "dev": "cd server && npm run dev"
+  },
+  "keywords": [
+    "crime-data-analytics",
+    "intelligence-platform",
+    "react",
+    "typescript",
+    "sqlite",
+    "data-visualization"
+  ],
+  "author": "Surya",
+  "license": "ISC"
+}
