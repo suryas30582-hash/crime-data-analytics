@@ -1,10 +1,15 @@
-# Netlify Configuration (when client is repository root)
 [build]
   publish = "dist"
   command = "npm run build"
 
 [build.environment]
   NODE_VERSION = "20"
+
+[[redirects]]
+  from = "/api/*"
+  to = "https://crime-data-analytics-1.onrender.com/api/:splat"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/*"
