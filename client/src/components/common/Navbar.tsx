@@ -122,8 +122,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleMobileSidebar, isMobileS
           </div>
         )}
 
-        {/* Right: Language Selector & User Menu */}
-        <div className="flex items-center space-x-3">
+        {/* Right: Emergency SOS, Language Selector & User Menu */}
+        <div className="flex items-center space-x-2.5 sm:space-x-3">
+          {/* Public SOS Report Crime Button */}
+          <Link
+            to="/emergency"
+            className="flex items-center space-x-1.5 rounded-lg bg-gradient-to-r from-rose-600 to-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg shadow-rose-600/30 hover:from-rose-500 hover:to-red-500 transition-all active:scale-95 animate-pulse"
+            title="Report Emergency / Crime SOS"
+          >
+            <span className="h-2 w-2 rounded-full bg-white animate-ping"></span>
+            <span>🚨 SOS Report</span>
+          </Link>
+
           {/* Language Selector */}
           <div className="relative">
             <button

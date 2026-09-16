@@ -80,5 +80,48 @@ export function initDatabase() {
       details TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS emergency_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_code TEXT UNIQUE NOT NULL,
+      incident_type TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'HIGH',
+      description TEXT NOT NULL,
+      photo_url TEXT,
+      audio_url TEXT,
+      latitude REAL,
+      longitude REAL,
+      location_address TEXT,
+      state TEXT,
+      district TEXT,
+      city TEXT,
+      citizen_name TEXT,
+      citizen_phone TEXT,
+      status TEXT NOT NULL DEFAULT 'RECEIVED',
+      status_timeline TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_emergency_code ON emergency_reports(report_code);
+    CREATE INDEX IF NOT EXISTS idx_emergency_status ON emergency_reports(status);
+    CREATE INDEX IF NOT EXISTS idx_emergency_severity ON emergency_reports(severity);
+    CREATE INDEX IF NOT EXISTS idx_emergency_created ON emergency_reports(created_at);
+
+    CREATE TABLE IF NOT EXISTS patrol_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_code TEXT NOT NULL,
+      unit_name TEXT NOT NULL,
+      vehicle_type TEXT NOT NULL,
+      officer_in_charge TEXT NOT NULL,
+      contact_number TEXT,
+      eta_minutes INTEGER NOT NULL DEFAULT 5,
+      dispatch_notes TEXT,
+      assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      resolved_at DATETIME,
+      FOREIGN KEY (report_code) REFERENCES emergency_reports(report_code) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_patrol_report ON patrol_assignments(report_code);
   `);
 }

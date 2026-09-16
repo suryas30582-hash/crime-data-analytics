@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { initDatabase } from './db/schema';
 import { seedDatabase } from './db/seed';
 import apiRouter from './routes';
@@ -32,6 +33,13 @@ app.use('/api', apiRouter);
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
+
+// Serve uploaded media
+const uploadsDir = path.resolve(__dirname, '../../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir));
 
 // Serve frontend in production if dist exists
 const clientDist = path.resolve(__dirname, '../../client/dist');

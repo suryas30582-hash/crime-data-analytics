@@ -19,6 +19,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Uploaded media
+server/uploads/
+!server/uploads/.gitkeep
+
 # OS metadata
 .DS_Store
 Thumbs.db

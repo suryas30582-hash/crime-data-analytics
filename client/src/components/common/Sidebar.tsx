@@ -32,6 +32,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onCloseMobile }) => {
 
   const navItems = [
     {
+      to: '/police-emergency',
+      label: 'Police Emergency Hub',
+      icon: ShieldAlert,
+      badge: 'SOS Live'
+    },
+    {
       to: '/dashboard',
       label: t('dashboard', 'Dashboard'),
       icon: LayoutDashboard,
@@ -76,6 +82,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onCloseMobile }) => {
   ];
 
   const secondaryNavItems = [
+    {
+      to: '/emergency',
+      label: '🚨 Report Crime (SOS)',
+      icon: ShieldAlert
+    },
     {
       to: '/settings',
       label: t('settings', 'Settings'),

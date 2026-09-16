@@ -164,5 +164,59 @@ export const api = {
       if (v) params.append(k, String(v));
     });
     return request<RegionReportData>(`/reports/region?${params.toString()}`);
+  },
+
+  // Citizen Emergency Reporting & Police Command Hub
+  submitEmergencyReport: async (formData: FormData) => {
+    const token = localStorage.getItem('crime_auth_token');
+    const response = await fetch(`${API_BASE}/emergency/report`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorJson = await response.json().catch(() => ({ error: 'Emergency submission failed' }));
+      throw new Error(errorJson.error || 'Emergency alert could not be transmitted');
+    }
+
+    return response.json() as Promise<{ success: boolean; message: string; report: any }>;
+  },
+
+  getEmergencyReports: (filters?: { status?: string; severity?: string; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.severity) params.append('severity', filters.severity);
+    if (filters?.limit) params.append('limit', String(filters.limit));
+    if (filters?.offset) params.append('offset', String(filters.offset));
+    return request<{ success: boolean; reports: any[]; stats: any }>(`/emergency/reports?${params.toString()}`);
+  },
+
+  getEmergencyReportByCode: (code: string) => {
+    return request<{ success: boolean; report: any }>(`/emergency/reports/${encodeURIComponent(code)}`);
+  },
+
+  updateEmergencyStatus: (code: string, status: string, note?: string) => {
+    return request<{ success: boolean; message: string; report: any }>(`/emergency/reports/${encodeURIComponent(code)}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, note })
+    });
+  },
+
+  assignPatrolUnit: (code: string, data: { unit_name: string; vehicle_type: string; officer_in_charge: string; contact_number?: string; eta_minutes?: number; dispatch_notes?: string }) => {
+    return request<{ success: boolean; message: string; report: any }>(`/emergency/reports/${encodeURIComponent(code)}/assign-patrol`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  getEmergencyStreamUrl: () => `${API_BASE}/emergency/stream`,
+  getMediaUrl: (path: string | null | undefined) => {
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) return path;
+    const base = API_BASE.replace(/\/api$/, '');
+    return `${base}${path.startsWith('/') ? '' : '/'}${path}`;
   }
 };

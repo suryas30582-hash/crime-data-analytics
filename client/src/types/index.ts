@@ -153,3 +153,55 @@ export interface ValidationReport {
   previewRows: any[];
   parsedValidRecords: CrimeRecord[];
 }
+
+export interface EmergencyTimelineEvent {
+  status: string;
+  timestamp: string;
+  note?: string;
+}
+
+export interface PatrolAssignment {
+  id?: number;
+  report_code: string;
+  unit_name: string;
+  vehicle_type: string;
+  officer_in_charge: string;
+  contact_number?: string;
+  eta_minutes: number;
+  dispatch_notes?: string;
+  assigned_at: string;
+  resolved_at?: string;
+}
+
+export interface EmergencyReport {
+  id: number;
+  report_code: string;
+  incident_type: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  description: string;
+  photo_url?: string | null;
+  audio_url?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_address?: string;
+  state?: string;
+  district?: string;
+  city?: string;
+  citizen_name?: string;
+  citizen_phone?: string;
+  status: 'RECEIVED' | 'REVIEWING' | 'PATROL_ASSIGNED' | 'RESPONDING' | 'RESOLVED';
+  status_timeline?: EmergencyTimelineEvent[];
+  patrol_assignment?: PatrolAssignment | null;
+  patrol_assignments?: PatrolAssignment[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmergencyStats {
+  total_emergencies: number;
+  critical_active: number;
+  active_incidents: number;
+  patrols_responding: number;
+  resolved_count: number;
+  avg_response_eta_minutes: number;
+}

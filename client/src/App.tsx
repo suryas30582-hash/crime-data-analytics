@@ -22,12 +22,14 @@ import { RegionReportsPage } from './pages/RegionReportsPage';
 import { AdminPage } from './pages/AdminPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { HelpPage } from './pages/HelpPage';
+import { EmergencyReportPage } from './pages/EmergencyReportPage';
+import { PoliceEmergencyPage } from './pages/PoliceEmergencyPage';
 
 export const App: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const location = useLocation();
 
-  const isPublicPage = ['/', '/login', '/register', '/forgot-password'].includes(location.pathname);
+  const isPublicPage = ['/', '/login', '/register', '/forgot-password', '/emergency'].includes(location.pathname);
 
   return (
     <div className="min-h-screen bg-[#070b16] text-slate-100 flex flex-col font-sans">
@@ -51,9 +53,14 @@ export const App: React.FC = () => {
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<LandingPage />} />
+              <Route path="/emergency" element={<EmergencyReportPage />} />
+              <Route path="/report-crime" element={<EmergencyReportPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+
+              {/* Police Emergency Command Hub (Accessible to analysts / officers) */}
+              <Route path="/police-emergency" element={<PoliceEmergencyPage />} />
 
               {/* Protected Intelligence Pages */}
               <Route

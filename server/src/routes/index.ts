@@ -7,6 +7,7 @@ import * as datasetsController from '../controllers/datasetsController';
 import * as uploadController from '../controllers/uploadController';
 import * as predictionsController from '../controllers/predictionsController';
 import * as reportsController from '../controllers/reportsController';
+import * as emergencyController from '../controllers/emergencyController';
 import { authenticate, optionalAuthenticate, requireAdmin } from '../middleware/auth';
 
 const router = Router();
@@ -14,6 +15,11 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 } // 50 MB
 });
+
+const emergencyUpload = upload.fields([
+  { name: 'photo', maxCount: 1 },
+  { name: 'audio', maxCount: 1 }
+]);
 
 // Auth Routes
 router.post('/auth/register', authController.register);
@@ -45,5 +51,13 @@ router.get('/predictions', optionalAuthenticate, predictionsController.getPredic
 
 // Region Reports Route
 router.get('/reports/region', optionalAuthenticate, reportsController.getRegionReport);
+
+// Citizen & Police Emergency Routes
+router.post('/emergency/report', emergencyUpload, emergencyController.createReport);
+router.get('/emergency/reports', optionalAuthenticate, emergencyController.getReports);
+router.get('/emergency/reports/:code', optionalAuthenticate, emergencyController.getReportByCode);
+router.put('/emergency/reports/:code/status', optionalAuthenticate, emergencyController.updateReportStatus);
+router.post('/emergency/reports/:code/assign-patrol', optionalAuthenticate, emergencyController.assignPatrol);
+router.get('/emergency/stream', emergencyController.streamEmergencyEvents);
 
 export default router;
