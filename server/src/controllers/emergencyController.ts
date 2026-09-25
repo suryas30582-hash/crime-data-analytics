@@ -1,13 +1,11 @@
 import { Request, Response } from 'express';
 import { db } from '../db/schema';
+import { IncidentReportModel, isMongoConnected } from '../db/mongodb';
+import { AuthRequest } from '../middleware/auth';
 import path from 'path';
 import fs from 'fs';
 
-// Setup uploads directory for emergency media
-const uploadsDir = path.resolve(__dirname, '../../uploads/emergency');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+import { emergencyUploadsDir as uploadsDir } from '../utils/paths';
 
 // In-Memory SSE Client Pool
 const sseClients: Response[] = [];
@@ -62,7 +60,7 @@ export function streamEmergencyEvents(req: Request, res: Response) {
 /**
  * Citizen Emergency Report Submission
  */
-export async function createReport(req: Request, res: Response) {
+export async function createReport(req: AuthRequest, res: Response) {
   try {
     const body = req.body;
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
@@ -73,7 +71,13 @@ export async function createReport(req: Request, res: Response) {
     const report_code = `EMG-${year}-${randomCode}`;
 
     let photo_url: string | null = null;
+    let photo_size: number | null = null;
+    let photo_mime_type: string | null = null;
+
     let audio_url: string | null = null;
+    let audio_duration: number | null = body.audio_duration ? parseFloat(body.audio_duration) : null;
+    let audio_size: number | null = null;
+    let audio_mime_type: string | null = null;
 
     // Handle uploaded photo
     if (files && files['photo'] && files['photo'][0]) {
@@ -83,8 +87,9 @@ export async function createReport(req: Request, res: Response) {
       const filepath = path.join(uploadsDir, filename);
       fs.writeFileSync(filepath, photoFile.buffer);
       photo_url = `/uploads/emergency/${filename}`;
+      photo_size = photoFile.size;
+      photo_mime_type = photoFile.mimetype || 'image/jpeg';
     } else if (body.photo_base64) {
-      // Direct base64 fallback
       try {
         const matches = body.photo_base64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         if (matches && matches.length === 3) {
@@ -92,6 +97,8 @@ export async function createReport(req: Request, res: Response) {
           const filename = `photo_${report_code}_${Date.now()}.jpg`;
           fs.writeFileSync(path.join(uploadsDir, filename), buffer);
           photo_url = `/uploads/emergency/${filename}`;
+          photo_size = buffer.length;
+          photo_mime_type = matches[1] || 'image/jpeg';
         }
       } catch (e) {
         console.error('Error saving base64 photo:', e);
@@ -106,8 +113,9 @@ export async function createReport(req: Request, res: Response) {
       const filepath = path.join(uploadsDir, filename);
       fs.writeFileSync(filepath, audioFile.buffer);
       audio_url = `/uploads/emergency/${filename}`;
+      audio_size = audioFile.size;
+      audio_mime_type = audioFile.mimetype || 'audio/webm';
     } else if (body.audio_base64) {
-      // Direct base64 audio fallback
       try {
         const matches = body.audio_base64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         if (matches && matches.length === 3) {
@@ -115,14 +123,21 @@ export async function createReport(req: Request, res: Response) {
           const filename = `audio_${report_code}_${Date.now()}.webm`;
           fs.writeFileSync(path.join(uploadsDir, filename), buffer);
           audio_url = `/uploads/emergency/${filename}`;
+          audio_size = buffer.length;
+          audio_mime_type = matches[1] || 'audio/webm';
         }
       } catch (e) {
         console.error('Error saving base64 audio:', e);
       }
     }
 
+    const userId = req.user?.id || null;
+    const citizen_name = body.citizen_name || req.user?.name || 'Anonymous Citizen';
+    const citizen_email = req.user?.email || body.citizen_email || null;
+    const citizen_phone = body.citizen_phone || null;
+
     const incident_type = body.incident_type || 'General Emergency';
-    const severity = (body.severity || 'HIGH').toUpperCase();
+    const severity = (body.severity || 'HIGH').toUpperCase() as any;
     const description = body.description || 'Emergency alert triggered by citizen';
     const latitude = body.latitude ? parseFloat(body.latitude) : null;
     const longitude = body.longitude ? parseFloat(body.longitude) : null;
@@ -130,46 +145,112 @@ export async function createReport(req: Request, res: Response) {
     const state = body.state || 'Tamil Nadu';
     const district = body.district || 'Chennai';
     const city = body.city || 'Chennai';
-    const citizen_name = body.citizen_name || 'Anonymous Citizen';
-    const citizen_phone = body.citizen_phone || null;
 
-    const initialTimeline = JSON.stringify([
+    const initialTimeline = [
       {
         status: 'RECEIVED',
-        timestamp: new Date().toISOString(),
+        timestamp: new Date(),
+        updated_by_name: citizen_name,
+        updated_by_role: req.user?.role || 'user',
         note: 'Emergency SOS received from citizen via Web Portal'
       }
-    ]);
+    ];
 
-    const stmt = db.prepare(`
-      INSERT INTO emergency_reports (
+    let createdIncident: any = null;
+
+    // 1. Central Storage: Persist in MongoDB Atlas if connected
+    if (isMongoConnected()) {
+      try {
+        createdIncident = await IncidentReportModel.create({
+          report_code,
+          user_id: userId || undefined,
+          citizen_name,
+          citizen_phone: citizen_phone || undefined,
+          citizen_email: citizen_email || undefined,
+          incident_type,
+          severity,
+          description,
+          photo_url: photo_url || undefined,
+          photo_size: photo_size || undefined,
+          photo_mime_type: photo_mime_type || undefined,
+          audio_url: audio_url || undefined,
+          audio_duration: audio_duration !== null ? audio_duration : undefined,
+          audio_size: audio_size || undefined,
+          audio_mime_type: audio_mime_type || undefined,
+          latitude: latitude !== null ? latitude : undefined,
+          longitude: longitude !== null ? longitude : undefined,
+          location_address,
+          state,
+          district,
+          city,
+          status: 'RECEIVED',
+          status_timeline: initialTimeline
+        });
+      } catch (err: any) {
+        console.warn('[Emergency] MongoDB save error, mirroring via SQLite:', err.message);
+      }
+    }
+
+    // 2. Mirror to SQLite DB for local resilience
+    try {
+      db.prepare(`
+        INSERT INTO emergency_reports (
+          report_code, incident_type, severity, description,
+          photo_url, photo_size, photo_mime_type,
+          audio_url, audio_duration, audio_size, audio_mime_type,
+          latitude, longitude, location_address,
+          state, district, city, citizen_name, citizen_phone,
+          status, status_timeline, user_id, citizen_email,
+          created_at, updated_at
+        ) VALUES (
+          ?, ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          'RECEIVED', ?, ?, ?,
+          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+      `).run(
+        report_code, incident_type, severity, description,
+        photo_url, photo_size, photo_mime_type,
+        audio_url, audio_duration, audio_size, audio_mime_type,
+        latitude, longitude, location_address,
+        state, district, city, citizen_name, citizen_phone,
+        JSON.stringify(initialTimeline), userId, citizen_email
+      );
+    } catch {
+      db.prepare(`
+        INSERT INTO emergency_reports (
+          report_code, incident_type, severity, description,
+          photo_url, audio_url, latitude, longitude, location_address,
+          state, district, city, citizen_name, citizen_phone,
+          status, status_timeline, created_at, updated_at
+        ) VALUES (
+          ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          'RECEIVED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+      `).run(
         report_code, incident_type, severity, description,
         photo_url, audio_url, latitude, longitude, location_address,
         state, district, city, citizen_name, citizen_phone,
-        status, status_timeline, created_at, updated_at
-      ) VALUES (
-        ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        'RECEIVED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-      )
-    `);
+        JSON.stringify(initialTimeline)
+      );
+    }
 
-    stmt.run(
-      report_code, incident_type, severity, description,
-      photo_url, audio_url, latitude, longitude, location_address,
-      state, district, city, citizen_name, citizen_phone,
-      initialTimeline
-    );
+    const newReport = createdIncident
+      ? createdIncident.toObject()
+      : db.prepare('SELECT * FROM emergency_reports WHERE report_code = ?').get(report_code);
 
-    const newReport = db.prepare('SELECT * FROM emergency_reports WHERE report_code = ?').get(report_code);
-
-    // Broadcast instant alert to Police Command Hub
+    // Broadcast instant alert to Police Command Hub and Admin
+    broadcastEmergencyEvent('NEW_INCIDENT', newReport);
     broadcastEmergencyEvent('NEW_EMERGENCY', newReport);
 
     res.status(201).json({
       success: true,
-      message: '🚨 Emergency alert broadcasted successfully to police control hub.',
+      message: '🚨 Emergency alert broadcasted successfully and saved in MongoDB Atlas.',
       report: newReport
     });
   } catch (error: any) {
@@ -179,52 +260,72 @@ export async function createReport(req: Request, res: Response) {
 }
 
 /**
- * Get All Emergency Reports with optional filters
+ * Get All Emergency Reports with optional filters (Queries MongoDB Atlas first)
  */
-export function getReports(req: Request, res: Response) {
+export async function getReports(req: Request, res: Response) {
   try {
     const { status, severity, limit = '50', offset = '0' } = req.query;
 
-    let query = 'SELECT * FROM emergency_reports WHERE 1=1';
-    const params: any[] = [];
+    let reports: any[] = [];
 
-    if (status && status !== 'ALL') {
-      query += ' AND status = ?';
-      params.push(status);
-    }
-
-    if (severity && severity !== 'ALL') {
-      query += ' AND severity = ?';
-      params.push(severity);
-    }
-
-    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit as string, 10), parseInt(offset as string, 10));
-
-    const reports: any[] = db.prepare(query).all(...params);
-
-    // Fetch patrol assignments for each report
-    const enriched = reports.map(r => {
-      const assignment = db.prepare('SELECT * FROM patrol_assignments WHERE report_code = ? ORDER BY assigned_at DESC LIMIT 1').get(r.report_code);
-      let timeline = [];
+    // Query MongoDB Atlas first
+    if (isMongoConnected()) {
       try {
-        timeline = r.status_timeline ? JSON.parse(r.status_timeline) : [];
-      } catch {
-        timeline = [];
-      }
-      return {
-        ...r,
-        patrol_assignment: assignment || null,
-        status_timeline: timeline
-      };
-    });
+        const filter: any = {};
+        if (status && status !== 'ALL') filter.status = status;
+        if (severity && severity !== 'ALL') filter.severity = severity;
 
-    // Also calculate summary stats
+        reports = await IncidentReportModel.find(filter)
+          .sort({ createdAt: -1 })
+          .limit(parseInt(limit as string, 10))
+          .skip(parseInt(offset as string, 10))
+          .lean();
+      } catch (err: any) {
+        console.warn('[Emergency] Mongo getReports error:', err.message);
+      }
+    }
+
+    // Fallback to SQLite if MongoDB empty or disconnected
+    if (reports.length === 0) {
+      let query = 'SELECT * FROM emergency_reports WHERE 1=1';
+      const params: any[] = [];
+
+      if (status && status !== 'ALL') {
+        query += ' AND status = ?';
+        params.push(status);
+      }
+
+      if (severity && severity !== 'ALL') {
+        query += ' AND severity = ?';
+        params.push(severity);
+      }
+
+      query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+      params.push(parseInt(limit as string, 10), parseInt(offset as string, 10));
+
+      const rows: any[] = db.prepare(query).all(...params);
+
+      reports = rows.map(r => {
+        const assignment = db.prepare('SELECT * FROM patrol_assignments WHERE report_code = ? ORDER BY assigned_at DESC LIMIT 1').get(r.report_code);
+        let timeline = [];
+        try {
+          timeline = r.status_timeline ? JSON.parse(r.status_timeline) : [];
+        } catch {
+          timeline = [];
+        }
+        return {
+          ...r,
+          patrol_assignment: assignment || null,
+          status_timeline: timeline
+        };
+      });
+    }
+
     const stats = getEmergencyStatsHelper();
 
     res.json({
       success: true,
-      reports: enriched,
+      reports,
       stats
     });
   } catch (error: any) {
@@ -420,4 +521,93 @@ function getEmergencyStatsHelper() {
     resolved_count: resolved?.count || 0,
     avg_response_eta_minutes: 4.2
   };
+}
+
+/**
+ * Delete specific evidence media (photo or audio) from an emergency report
+ */
+export function deleteReportMedia(req: Request, res: Response) {
+  try {
+    const { code, mediaType } = req.params;
+
+    if (mediaType !== 'photo' && mediaType !== 'audio') {
+      return res.status(400).json({ success: false, error: 'mediaType must be either "photo" or "audio"' });
+    }
+
+    const report: any = db.prepare('SELECT * FROM emergency_reports WHERE report_code = ? OR id = ?').get(code, code);
+    if (!report) {
+      return res.status(404).json({ success: false, error: 'Emergency report not found' });
+    }
+
+    const reportCode = report.report_code;
+    let targetFilePath: string | null = null;
+    let updateColumn = '';
+
+    if (mediaType === 'photo' && report.photo_url) {
+      updateColumn = 'photo_url';
+      if (report.photo_url.startsWith('/uploads/emergency/')) {
+        const filename = path.basename(report.photo_url);
+        targetFilePath = path.join(uploadsDir, filename);
+      }
+    } else if (mediaType === 'audio' && report.audio_url) {
+      updateColumn = 'audio_url';
+      if (report.audio_url.startsWith('/uploads/emergency/')) {
+        const filename = path.basename(report.audio_url);
+        targetFilePath = path.join(uploadsDir, filename);
+      }
+    }
+
+    if (!updateColumn) {
+      return res.status(400).json({ success: false, error: `No ${mediaType} attached to report ${reportCode}` });
+    }
+
+    // Delete physical file from disk if present
+    if (targetFilePath && fs.existsSync(targetFilePath)) {
+      try {
+        fs.unlinkSync(targetFilePath);
+      } catch (err) {
+        console.warn(`Warning: Could not unlink ${targetFilePath}:`, err);
+      }
+    }
+
+    // Update database record
+    let timeline: any[] = [];
+    try {
+      timeline = report.status_timeline ? JSON.parse(report.status_timeline) : [];
+    } catch {
+      timeline = [];
+    }
+
+    timeline.push({
+      status: report.status,
+      timestamp: new Date().toISOString(),
+      note: `Evidence ${mediaType} deleted by authorized officer/admin.`
+    });
+
+    db.prepare(`
+      UPDATE emergency_reports
+      SET ${updateColumn} = NULL, status_timeline = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE report_code = ?
+    `).run(JSON.stringify(timeline), reportCode);
+
+    const updated: any = db.prepare('SELECT * FROM emergency_reports WHERE report_code = ?').get(reportCode);
+    const assignment = db.prepare('SELECT * FROM patrol_assignments WHERE report_code = ? ORDER BY assigned_at DESC LIMIT 1').get(reportCode);
+
+    const fullReport = {
+      ...updated,
+      patrol_assignment: assignment || null,
+      status_timeline: timeline
+    };
+
+    broadcastEmergencyEvent('STATUS_UPDATE', fullReport);
+
+    res.json({
+      success: true,
+      message: `Emergency evidence ${mediaType} successfully deleted.`,
+      report: fullReport
+    });
+  } catch (error: any) {
+    console.error('Error deleting report media:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }

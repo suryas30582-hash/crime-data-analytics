@@ -2,9 +2,11 @@ import { Request, Response } from 'express';
 import * as xlsx from 'xlsx';
 import Papa from 'papaparse';
 import { db } from '../db/schema';
+import { DatasetModel, CrimeRecordModel, isMongoConnected } from '../db/mongodb';
 import { AuthRequest } from '../middleware/auth';
 import { CrimeRecord } from '../types';
 import { getDistrictForCity } from '../db/seed';
+import { broadcastEmergencyEvent } from './emergencyController';
 
 const REQUIRED_COLUMNS = [
   'Crime_ID',
@@ -241,7 +243,7 @@ export function validateUploadedFile(req: AuthRequest, res: Response) {
   }
 }
 
-export function commitImport(req: AuthRequest, res: Response) {
+export async function commitImport(req: AuthRequest, res: Response) {
   try {
     const { datasetName, datasetDescription, targetDatasetId, records } = req.body;
 
@@ -250,16 +252,21 @@ export function commitImport(req: AuthRequest, res: Response) {
     }
 
     let activeDatasetId = targetDatasetId;
+    let finalDatasetName = datasetName?.trim() || `Uploaded Dataset (${new Date().toLocaleDateString()})`;
+    const uploaderRole = req.user?.role || 'user';
+    const uploaderInfo = `${req.user?.name || 'User'} (${uploaderRole.toUpperCase()})`;
 
     if (!activeDatasetId || activeDatasetId === 'new') {
-      const name = datasetName && datasetName.trim() ? datasetName.trim() : `Uploaded Dataset (${new Date().toLocaleDateString()})`;
-      const desc = datasetDescription || `Uploaded by ${req.user?.name || 'User'} on ${new Date().toLocaleString()}`;
+      const desc = datasetDescription || `Uploaded by ${uploaderInfo} on ${new Date().toLocaleString()}`;
       activeDatasetId = `ds_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
       db.prepare(`
         INSERT INTO datasets (id, name, description, record_count, created_by, is_default)
-        VALUES (?, ?, ?, ?, ?, 0)
-      `).run(activeDatasetId, name, desc, records.length, req.user?.name || 'User');
+        VALUES (?, ?, ?, ?, ?, 1)
+      `).run(activeDatasetId, finalDatasetName, desc, records.length, uploaderInfo);
+    } else {
+      const existingDs = db.prepare('SELECT name FROM datasets WHERE id = ?').get(activeDatasetId) as any;
+      if (existingDs) finalDatasetName = existingDs.name;
     }
 
     const insertRecord = db.prepare(`
@@ -314,19 +321,99 @@ export function commitImport(req: AuthRequest, res: Response) {
       throw err;
     }
 
-    // Update dataset record count
+    // Update dataset record count and set as central active default
     const totalInDataset = (db.prepare('SELECT COUNT(*) as count FROM crime_records WHERE dataset_id = ?').get(activeDatasetId) as { count: number }).count;
     db.prepare('UPDATE datasets SET record_count = ? WHERE id = ?').run(totalInDataset, activeDatasetId);
 
+    // Set as the current default dataset so all users immediately access it
+    db.prepare('UPDATE datasets SET is_default = 0').run();
+    db.prepare('UPDATE datasets SET is_default = 1 WHERE id = ?').run(activeDatasetId);
+
+    // -------------------------------------------------------------
+    // PERSIST TO MONGODB ATLAS
+    // -------------------------------------------------------------
+    if (!isMongoConnected()) {
+      return res.status(503).json({
+        error: 'MongoDB Atlas connection is currently offline. Please verify network access and MongoDB connection.'
+      });
+    }
+
+    let mongoSyncedCount = 0;
+    try {
+      await DatasetModel.updateOne(
+        { id: activeDatasetId },
+        {
+          $set: {
+            id: activeDatasetId,
+            name: finalDatasetName,
+            description: datasetDescription || `Uploaded by ${uploaderInfo} on ${new Date().toLocaleString()}`,
+            record_count: totalInDataset,
+            created_by: uploaderInfo,
+            is_default: 1
+          }
+        },
+        { upsert: true }
+      );
+
+      // Reset default flag on other datasets in MongoDB
+      await DatasetModel.updateMany({ id: { $ne: activeDatasetId } }, { $set: { is_default: 0 } });
+
+      const mongoDocs = records.map((r: CrimeRecord) => ({
+        dataset_id: activeDatasetId,
+        crime_id: r.crime_id,
+        date: r.date,
+        time: r.time,
+        year: r.year,
+        month: r.month,
+        crime_type: r.crime_type,
+        city: r.city,
+        state: r.state,
+        district: r.district || '',
+        location: r.location,
+        victim_age: r.victim_age ?? null,
+        victim_gender: r.victim_gender ?? null,
+        suspect_age: r.suspect_age ?? null,
+        suspect_gender: r.suspect_gender ?? null,
+        weapon_used: r.weapon_used ?? null,
+        case_status: r.case_status,
+        latitude: r.latitude ?? null,
+        longitude: r.longitude ?? null,
+        crime_severity: r.crime_severity,
+        police_station: r.police_station,
+        arrest_made: r.arrest_made,
+        incident_day: r.incident_day,
+        investigation_days: r.investigation_days ?? null
+      }));
+
+      const insertedResult = await CrimeRecordModel.insertMany(mongoDocs, { ordered: false });
+      mongoSyncedCount = insertedResult.length;
+      console.log(`[MongoDB Atlas] ✅ Successfully persisted ${mongoSyncedCount} records to 'crimerecords' collection!`);
+    } catch (mongoErr: any) {
+      console.error(`[MongoDB Atlas Upload Error]:`, mongoErr);
+      return res.status(500).json({ error: `MongoDB Atlas persistence failed: ${mongoErr.message}` });
+    }
+
     // Log audit
     db.prepare('INSERT INTO audit_logs (user_id, action, details) VALUES (?, ?, ?)')
-      .run(req.user?.id || 'anonymous', 'IMPORT_DATASET', `Imported ${records.length} records into dataset ${activeDatasetId}`);
+      .run(req.user?.id || 'anonymous', 'IMPORT_DATASET', `Imported ${records.length} records into dataset ${activeDatasetId} by ${uploaderInfo}`);
+
+    // Broadcast real-time SSE event to all connected Citizen, Police, and Admin dashboards
+    broadcastEmergencyEvent('NEW_DATASET_UPLOADED', {
+      datasetId: activeDatasetId,
+      name: finalDatasetName,
+      uploaderName: req.user?.name || 'User',
+      uploaderRole: uploaderRole,
+      recordCount: totalInDataset,
+      timestamp: new Date().toISOString()
+    });
 
     return res.json({
       success: true,
-      message: `Successfully imported ${records.length} crime records into the database!`,
+      message: `Successfully imported ${records.length} crime records into central database & MongoDB Atlas!`,
       datasetId: activeDatasetId,
-      totalDatasetRecords: totalInDataset
+      datasetName: finalDatasetName,
+      totalDatasetRecords: totalInDataset,
+      mongoRecordsPersisted: mongoSyncedCount
     });
   } catch (error: any) {
     console.error('commitImport error:', error);

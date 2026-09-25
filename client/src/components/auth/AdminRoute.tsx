@@ -9,12 +9,12 @@ export const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }
 
   if (isLoading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[#070b16]">
+      <div className="flex h-screen w-full items-center justify-center bg-[#FFF7F4]">
         <div className="flex flex-col items-center space-y-4">
-          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/30 animate-pulse">
-            <ShieldAlert className="h-8 w-8 text-amber-400" />
+          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-[#D65A31]/10 border border-[#D65A31]/30 animate-pulse shadow-warm">
+            <ShieldAlert className="h-8 w-8 text-[#D65A31]" />
           </div>
-          <p className="text-xs font-mono text-amber-400">Verifying administrative access privileges...</p>
+          <p className="text-xs font-mono text-[#D65A31] font-medium">Verifying administrative access privileges...</p>
         </div>
       </div>
     );

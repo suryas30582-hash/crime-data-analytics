@@ -90,6 +90,43 @@ export const DatasetProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   };
 
+  // Real-time synchronization: listen for newly uploaded datasets across all roles
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(api.getEmergencyStreamUrl());
+      eventSource.addEventListener('NEW_DATASET_UPLOADED', (e: MessageEvent) => {
+        try {
+          const payload = JSON.parse(e.data);
+          console.log('[DatasetContext] Live central dataset update received:', payload);
+          loadDatasets();
+          if (payload.datasetId) {
+            setActiveDatasetId(payload.datasetId);
+          }
+        } catch (err) {
+          console.warn('Failed to parse NEW_DATASET_UPLOADED event', err);
+        }
+      });
+    } catch (err) {
+      console.warn('Could not establish dataset live SSE stream', err);
+    }
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'crime_active_dataset_id' && e.newValue && e.newValue !== activeDatasetId) {
+        setActiveDatasetIdState(e.newValue);
+        setFilters(prev => ({ ...prev, datasetId: e.newValue! }));
+        loadDatasets();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      if (eventSource) eventSource.close();
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [activeDatasetId, loadDatasets]);
+
   // Load Available Years for the active dataset
   useEffect(() => {
     async function loadYears() {

@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { initDatabase } from './db/schema';
 import { seedDatabase } from './db/seed';
+import { connectMongoDB } from './db/mongodb';
 import apiRouter from './routes';
 
 dotenv.config();
@@ -22,10 +23,6 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Initialize DB and Seed preloaded Excel datasets
-initDatabase();
-seedDatabase();
-
 // Mount API routes
 app.use('/api', apiRouter);
 
@@ -34,12 +31,23 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
+import { uploadsDir } from './utils/paths';
+
 // Serve uploaded media
-const uploadsDir = path.resolve(__dirname, '../../uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', express.static(uploadsDir, {
+  setHeaders: (res, filePath) => {
+    res.setHeader('Accept-Ranges', 'bytes');
+    if (filePath.endsWith('.webm')) {
+      res.setHeader('Content-Type', 'audio/webm');
+    } else if (filePath.endsWith('.mp4')) {
+      res.setHeader('Content-Type', 'audio/mp4');
+    } else if (filePath.endsWith('.ogg')) {
+      res.setHeader('Content-Type', 'audio/ogg');
+    } else if (filePath.endsWith('.wav')) {
+      res.setHeader('Content-Type', 'audio/wav');
+    }
+  }
+}));
 
 // Serve frontend in production if dist exists
 const clientDist = path.resolve(__dirname, '../../client/dist');
@@ -55,10 +63,37 @@ app.get('*', (req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`=========================================`);
-  console.log(` Crime Data Analytics Backend Server     `);
-  console.log(` Port: http://localhost:${PORT}          `);
-  console.log(` Ready for requests                      `);
-  console.log(`=========================================`);
+async function startServer() {
+  console.log('Connecting to databases...');
+  const isConnected = await connectMongoDB();
+
+  // Initialize and seed SQLite DB
+  initDatabase();
+  seedDatabase();
+
+  const server = app.listen(PORT, () => {
+    console.log(`=========================================`);
+    console.log(` Crime Data Analytics Backend Server     `);
+    console.log(` Port: http://localhost:${PORT}          `);
+    console.log(` MongoDB Atlas Status: ${isConnected ? 'CONNECTED' : 'DISCONNECTED'} `);
+    console.log(` Ready for requests                      `);
+    console.log(`=========================================`);
+  });
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n❌ [Port Conflict Error]: Port ${PORT} is already in use by another process.`);
+      console.error(`   To resolve this:`);
+      console.error(`   1. Stop the running process on port ${PORT} (e.g. Ctrl+C in running terminal), OR`);
+      console.error(`   2. Run with a different port: $env:PORT=5001; npm start\n`);
+      process.exit(1);
+    } else {
+      console.error('Server error:', err);
+    }
+  });
+}
+
+startServer().catch((err) => {
+  console.error('Fatal error starting server:', err);
+  process.exit(1);
 });

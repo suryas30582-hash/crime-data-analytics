@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
 import { db } from '../db/schema';
+import { CrimeRecordModel, isMongoConnected } from '../db/mongodb';
 import { FilterParams } from '../types';
 
-export function getRecords(req: Request, res: Response) {
+export async function getRecords(req: Request, res: Response) {
   try {
     const filters = req.query as FilterParams & {
       page?: string;
@@ -34,13 +35,63 @@ export function getRecords(req: Request, res: Response) {
 
     const sortBy = allowedSortColumns[filters.sortBy || 'date'] || 'date';
     const sortOrder = (filters.sortOrder || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-
-    const clauses: string[] = [];
-    const args: any[] = [];
-
     const datasetId = filters.datasetId || 'ds_india_all';
-    clauses.push('dataset_id = ?');
-    args.push(datasetId);
+
+    // 1. Try fetching from MongoDB Atlas if connected
+    if (isMongoConnected()) {
+      try {
+        const query: any = { dataset_id: datasetId };
+        if (filters.state && filters.state !== 'All' && filters.state.trim() !== '') query.state = filters.state;
+        if (filters.district && filters.district !== 'All' && filters.district.trim() !== '') query.district = filters.district;
+        if (filters.city && filters.city !== 'All' && filters.city.trim() !== '') query.city = filters.city;
+        if (filters.year && filters.year !== 'All' && String(filters.year).trim() !== '') query.year = Number(filters.year);
+        if (filters.crimeType && filters.crimeType !== 'All' && filters.crimeType.trim() !== '') query.crime_type = filters.crimeType;
+        if (filters.caseStatus && filters.caseStatus !== 'All' && filters.caseStatus.trim() !== '') query.case_status = filters.caseStatus;
+        if (filters.severity && filters.severity !== 'All' && filters.severity.trim() !== '') query.crime_severity = filters.severity;
+        if (filters.arrestMade && filters.arrestMade !== 'All' && filters.arrestMade.trim() !== '') query.arrest_made = filters.arrestMade;
+
+        if (filters.search && filters.search.trim() !== '') {
+          const reg = new RegExp(filters.search.trim(), 'i');
+          query.$or = [
+            { crime_id: reg },
+            { crime_type: reg },
+            { city: reg },
+            { state: reg },
+            { district: reg },
+            { location: reg },
+            { police_station: reg }
+          ];
+        }
+
+        const mongoTotal = await CrimeRecordModel.countDocuments(query);
+        if (mongoTotal > 0) {
+          const sortObj: any = {};
+          sortObj[sortBy] = sortOrder === 'ASC' ? 1 : -1;
+
+          const mongoRecords = await CrimeRecordModel.find(query)
+            .sort(sortObj)
+            .skip(offset)
+            .limit(limit)
+            .lean();
+
+          return res.json({
+            records: mongoRecords,
+            pagination: {
+              page,
+              limit,
+              totalRecords: mongoTotal,
+              totalPages: Math.ceil(mongoTotal / limit)
+            }
+          });
+        }
+      } catch (mongoErr) {
+        console.warn('MongoDB query fallback to SQLite:', mongoErr);
+      }
+    }
+
+    // 2. Local SQLite query fallback
+    const clauses: string[] = ['dataset_id = ?'];
+    const args: any[] = [datasetId];
 
     if (filters.state && filters.state !== 'All' && filters.state.trim() !== '') {
       clauses.push('state = ?');

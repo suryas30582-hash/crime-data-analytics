@@ -9,12 +9,12 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
 
   if (isLoading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[#070b16]">
+      <div className="flex h-screen w-full items-center justify-center bg-[#FFF7F4]">
         <div className="flex flex-col items-center space-y-4">
-          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-500/10 border border-cyan-500/30 animate-pulse">
-            <Shield className="h-8 w-8 text-cyan-400" />
+          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-[#883A2E]/10 border border-[#883A2E]/30 animate-pulse shadow-warm">
+            <Shield className="h-8 w-8 text-[#883A2E]" />
           </div>
-          <p className="text-xs font-mono text-cyan-400">Verifying security credentials...</p>
+          <p className="text-xs font-mono text-[#883A2E] font-medium">Verifying security credentials...</p>
         </div>
       </div>
     );
