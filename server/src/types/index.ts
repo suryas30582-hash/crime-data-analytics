@@ -3,13 +3,7 @@ export interface User {
   email: string;
   name: string;
   password_hash: string;
-  role: 'admin' | 'police' | 'user';
-  roles?: ('admin' | 'police' | 'user')[];
-  badge_number?: string | null;
-  station?: string | null;
-  department?: string | null;
-  phone?: string | null;
-  status?: 'active' | 'suspended';
+  role: 'admin' | 'user';
   created_at: string;
 }
 

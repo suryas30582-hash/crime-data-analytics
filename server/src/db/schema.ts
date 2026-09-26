@@ -21,12 +21,7 @@ export function initDatabase() {
       email TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
       password_hash TEXT NOT NULL,
-      role TEXT CHECK(role IN ('admin', 'police', 'user')) NOT NULL DEFAULT 'user',
-      badge_number TEXT,
-      station TEXT,
-      department TEXT,
-      phone TEXT,
-      status TEXT DEFAULT 'active',
+      role TEXT CHECK(role IN ('admin', 'user')) NOT NULL DEFAULT 'user',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -93,12 +88,7 @@ export function initDatabase() {
       severity TEXT NOT NULL DEFAULT 'HIGH',
       description TEXT NOT NULL,
       photo_url TEXT,
-      photo_size INTEGER,
-      photo_mime_type TEXT,
       audio_url TEXT,
-      audio_duration REAL,
-      audio_size INTEGER,
-      audio_mime_type TEXT,
       latitude REAL,
       longitude REAL,
       location_address TEXT,
@@ -107,8 +97,6 @@ export function initDatabase() {
       city TEXT,
       citizen_name TEXT,
       citizen_phone TEXT,
-      citizen_email TEXT,
-      user_id TEXT,
       status TEXT NOT NULL DEFAULT 'RECEIVED',
       status_timeline TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -136,51 +124,4 @@ export function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_patrol_report ON patrol_assignments(report_code);
   `);
-
-  // Safe migrations for existing SQLite database
-  try {
-    const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get() as any;
-    if (tableInfo && tableInfo.sql && !tableInfo.sql.includes('police')) {
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS users_temp (
-          id TEXT PRIMARY KEY,
-          email TEXT UNIQUE NOT NULL,
-          name TEXT NOT NULL,
-          password_hash TEXT NOT NULL,
-          role TEXT CHECK(role IN ('admin', 'police', 'user')) NOT NULL DEFAULT 'user',
-          badge_number TEXT,
-          station TEXT,
-          department TEXT,
-          phone TEXT,
-          status TEXT DEFAULT 'active',
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-        INSERT OR IGNORE INTO users_temp (id, email, name, password_hash, role, created_at)
-        SELECT id, email, name, password_hash, role, created_at FROM users;
-        DROP TABLE users;
-        ALTER TABLE users_temp RENAME TO users;
-      `);
-    }
-  } catch (err: any) {
-    console.warn('[DB Migration] User table update warning:', err.message);
-  }
-
-  const userColumns = ['badge_number', 'station', 'department', 'phone', 'status', 'roles'];
-  for (const col of userColumns) {
-    try {
-      db.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT;`);
-    } catch {
-      // Column already exists
-    }
-  }
-
-  const reportColumns = ['user_id', 'citizen_email', 'officer_notes', 'assigned_officer_id', 'assigned_officer_name', 'audio_duration', 'audio_size', 'audio_mime_type', 'photo_size', 'photo_mime_type'];
-  for (const col of reportColumns) {
-    try {
-      db.exec(`ALTER TABLE emergency_reports ADD COLUMN ${col} TEXT;`);
-    } catch {
-      // Column already exists
-    }
-  }
 }
-

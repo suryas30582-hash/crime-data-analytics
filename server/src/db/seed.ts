@@ -3,8 +3,6 @@ import path from 'path';
 import fs from 'fs';
 import { db, initDatabase } from './schema';
 import { CrimeRecord } from '../types';
-import bcrypt from 'bcryptjs';
-import { UserModel, isMongoConnected } from './mongodb';
 
 const cityToDistrictMap: Record<string, string> = {
   'Chennai': 'Chennai',
@@ -127,134 +125,8 @@ export function parseExcelFile(filePath: string): any[] {
   return xlsx.utils.sheet_to_json(worksheet, { defval: '' });
 }
 
-export async function seedDefaultUsers() {
-  const salt = bcrypt.genSaltSync(10);
-  const defaultUserHash = bcrypt.hashSync('password123', salt);
-  const adminPassword = process.env.ADMIN_PASSWORD || 'AdminSecret2026!';
-  const policePassword = process.env.POLICE_PASSWORD || 'PoliceSecret2026!';
-
-  const adminHash = bcrypt.hashSync(adminPassword, salt);
-  const policeHash = bcrypt.hashSync(policePassword, salt);
-
-  const defaultUsers = [
-    {
-      id: 'usr_admin_surya',
-      email: 'suryas30582@gmail.com',
-      name: 'Surya (Admin & Citizen)',
-      hash: adminHash,
-      role: 'admin',
-      roles: ['admin', 'user'],
-      badge_number: 'ADM-HQ-001',
-      station: 'National Intelligence Bureau',
-      department: 'State Security & Analytics',
-      phone: '+91 98400 00001'
-    },
-    {
-      id: 'usr_police_ramiya',
-      email: 'rramiya697@gmail.com',
-      name: 'Inspector Ramiya (Police & Citizen)',
-      hash: policeHash,
-      role: 'police',
-      roles: ['police', 'user'],
-      badge_number: 'TN-POL-9090',
-      station: 'Chennai Headquarters',
-      department: 'Special Crime Investigation Branch',
-      phone: '+91 98401 00002'
-    },
-    {
-      id: 'usr_admin_001',
-      email: 'admin@crimelytixs.gov.in',
-      name: 'Director Raman (Admin)',
-      hash: adminHash,
-      role: 'admin',
-      roles: ['admin', 'user'],
-      badge_number: 'ADM-HQ-01',
-      station: 'National Intelligence Bureau',
-      department: 'State Security & Analytics',
-      phone: '+91 98400 11111'
-    },
-    {
-      id: 'usr_police_001',
-      email: 'officer.vijay@police.gov.in',
-      name: 'Inspector Vijay IPS',
-      hash: policeHash,
-      role: 'police',
-      roles: ['police', 'user'],
-      badge_number: 'TN-POL-4042',
-      station: 'Chennai Central Police Station',
-      department: 'Crime Investigation Division',
-      phone: '+91 98401 22222'
-    },
-    {
-      id: 'usr_citizen_001',
-      email: 'citizen.sharma@example.com',
-      name: 'Aarav Sharma (Citizen)',
-      hash: defaultUserHash,
-      role: 'user',
-      roles: ['user'],
-      badge_number: null,
-      station: null,
-      department: 'Citizen Community',
-      phone: '+91 98401 33333'
-    }
-  ];
-
-  for (const u of defaultUsers) {
-    const rolesJson = JSON.stringify(u.roles);
-    const existing = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(u.email.toLowerCase());
-    
-    if (!existing) {
-      try {
-        db.prepare(`
-          INSERT INTO users (id, email, name, password_hash, role, roles, badge_number, station, department, phone, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
-        `).run(u.id, u.email.toLowerCase(), u.name, u.hash, u.role, rolesJson, u.badge_number, u.station, u.department, u.phone);
-      } catch {
-        db.prepare(`
-          INSERT INTO users (id, email, name, password_hash, role, roles)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `).run(u.id, u.email.toLowerCase(), u.name, u.hash, u.role, rolesJson);
-      }
-    } else {
-      // Ensure password_hash and roles column are updated for existing accounts
-      try {
-        db.prepare('UPDATE users SET password_hash = ?, roles = ?, role = ? WHERE LOWER(email) = ?').run(u.hash, rolesJson, u.role, u.email.toLowerCase());
-      } catch (err: any) {
-        // ignore
-      }
-    }
-
-    if (isMongoConnected()) {
-      try {
-        await UserModel.updateOne(
-          { email: u.email.toLowerCase() },
-          {
-            $set: {
-              id: u.id,
-              email: u.email.toLowerCase(),
-              name: u.name,
-              password_hash: u.hash,
-              role: u.role as any,
-              roles: u.roles,
-              badge_number: u.badge_number || undefined,
-              station: u.station || undefined,
-              department: u.department || undefined,
-              phone: u.phone || undefined,
-              status: 'active'
-            }
-          },
-          { upsert: true }
-        );
-      } catch (err) {
-        // ignore
-      }
-    }
-  }
-}
-
 export function seedDatabase() {
   initDatabase();
-  seedDefaultUsers();
 
   const datasetCountRow = db.prepare('SELECT COUNT(*) as count FROM datasets').get() as { count: number };
   if (datasetCountRow && datasetCountRow.count > 0) {

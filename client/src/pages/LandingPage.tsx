@@ -1,247 +1,207 @@
 import React from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { ArrowRight, ShieldAlert, LogIn } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import {
+  Shield,
+  BarChart3,
+  TrendingUp,
+  MapPin,
+  FileSpreadsheet,
+  UploadCloud,
+  FileText,
+  Lock,
+  Database,
+  ArrowRight,
+  CheckCircle2,
+  Sparkles,
+  Layers,
+  Search
+} from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
+import { useDataset } from '../context/DatasetContext';
 
 export const LandingPage: React.FC = () => {
-  const navigate = useNavigate();
+  const { t } = useLanguage();
   const { user } = useAuth();
+  const { datasets } = useDataset();
 
-  const handleGetStarted = () => {
-    if (user) {
-      if (user.role === 'admin') navigate('/admin/dashboard');
-      else if (user.role === 'police') navigate('/police/dashboard');
-      else navigate('/user/dashboard');
-    } else {
-      navigate('/login');
+  const totalLoadedRecords = datasets.reduce((acc, d) => acc + (d.actual_record_count || 0), 0);
+
+  const featureCards = [
+    {
+      icon: BarChart3,
+      title: 'Real Analytics Engine',
+      desc: 'Dynamic KPI calculations and live visualizations computed strictly from actual uploaded crime datasets.',
+      color: 'from-cyan-500/20 to-blue-500/5',
+      border: 'border-cyan-500/30',
+      iconColor: 'text-cyan-400'
+    },
+    {
+      icon: MapPin,
+      title: 'India-Wide Spatial Hierarchy',
+      desc: 'Seamless multi-level drilldown: All Indian States -> Districts -> Cities -> Police Station incident records.',
+      color: 'from-emerald-500/20 to-teal-500/5',
+      border: 'border-emerald-500/30',
+      iconColor: 'text-emerald-400'
+    },
+    {
+      icon: TrendingUp,
+      title: 'Data-Driven Predictions',
+      desc: 'Forecasting algorithms, high-risk location hotspots, and temporal threat index derived strictly from historical data.',
+      color: 'from-amber-500/20 to-orange-500/5',
+      border: 'border-amber-500/30',
+      iconColor: 'text-amber-400'
+    },
+    {
+      icon: UploadCloud,
+      title: 'Dataset Validation & Ingestion',
+      desc: 'Support for CSV and XLSX files with pre-validation diagnostics, error reporting, and safe database import.',
+      color: 'from-violet-500/20 to-purple-500/5',
+      border: 'border-violet-500/30',
+      iconColor: 'text-violet-400'
+    },
+    {
+      icon: FileText,
+      title: 'Regional PDF Intelligence Reports',
+      desc: 'Instant generation and export of multi-page analytical briefings for state, district, or city law enforcement.',
+      color: 'from-rose-500/20 to-pink-500/5',
+      border: 'border-rose-500/30',
+      iconColor: 'text-rose-400'
+    },
+    {
+      icon: Lock,
+      title: '13 Indian Languages & RBAC',
+      desc: 'Full localization in 13 Indian languages with role-based access control protecting administrative actions.',
+      color: 'from-blue-500/20 to-indigo-500/5',
+      border: 'border-blue-500/30',
+      iconColor: 'text-blue-400'
     }
-  };
+  ];
 
   return (
-    <div className="relative min-h-screen bg-[#090D14] text-[#F7FAFC] flex flex-col items-center justify-center overflow-hidden px-4 select-none">
-      {/* Dark Cyber Mesh Background & Ambient Glow */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem] pointer-events-none" />
-      <div className="absolute -top-40 -left-40 h-96 w-96 rounded-full bg-gradient-to-tr from-[#883A2E]/30 to-[#D65A31]/20 blur-[120px] pointer-events-none" />
-      <div className="absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-gradient-to-tl from-[#3182CE]/20 to-[#883A2E]/20 blur-[120px] pointer-events-none" />
+    <div className="relative min-h-screen bg-[#070b16] overflow-hidden">
+      {/* Background Cyber Grid Accent */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b10_1px,transparent_1px),linear-gradient(to_bottom,#1e293b10_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none" />
 
-      {/* Main Centered Content Container */}
-      <div className="relative z-10 max-w-3xl mx-auto flex flex-col items-center text-center space-y-8 py-12">
-        
-        {/* 1. Animated Crime Data Analytics SVG Logo */}
-        <div className="relative group cursor-pointer">
-          <div className="absolute -inset-4 rounded-full bg-gradient-to-r from-[#D65A31]/30 via-[#883A2E]/40 to-[#3182CE]/30 blur-2xl opacity-75 group-hover:opacity-100 transition-opacity duration-500" />
-          
-          <svg
-            viewBox="0 0 400 400"
-            className="w-56 h-56 sm:w-72 sm:h-72 lg:w-80 lg:h-80 drop-shadow-[0_0_40px_rgba(214,90,49,0.35)] transition-transform duration-500 hover:scale-[1.03]"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <defs>
-              <linearGradient id="shieldGrad" x1="50" y1="20" x2="350" y2="380" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#D65A31" />
-                <stop offset="50%" stopColor="#883A2E" />
-                <stop offset="100%" stopColor="#1A0A06" />
-              </linearGradient>
+      {/* Hero Section */}
+      <section className="relative pt-20 pb-20 sm:pt-28 sm:pb-28">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
+          {/* Badge */}
+          <div className="inline-flex items-center space-x-2 rounded-full border border-cyan-500/30 bg-cyan-950/40 px-3.5 py-1 text-xs font-semibold text-cyan-400 backdrop-blur-md mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <Sparkles className="h-3.5 w-3.5 text-cyan-300" />
+            <span>National Intelligence & Regional Crime Analytics v2.0</span>
+          </div>
 
-              <linearGradient id="lensGrad" x1="160" y1="140" x2="260" y2="240" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#63B3ED" stopOpacity="0.35" />
-                <stop offset="100%" stopColor="#3182CE" stopOpacity="0.08" />
-              </linearGradient>
-
-              <linearGradient id="barGrad1" x1="0" y1="260" x2="0" y2="180" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#883A2E" />
-                <stop offset="100%" stopColor="#D65A31" />
-              </linearGradient>
-
-              <linearGradient id="barGrad2" x1="0" y1="260" x2="0" y2="140" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#D65A31" />
-                <stop offset="100%" stopColor="#F6AD55" />
-              </linearGradient>
-
-              <linearGradient id="barGrad3" x1="0" y1="260" x2="0" y2="160" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#3182CE" />
-                <stop offset="100%" stopColor="#63B3ED" />
-              </linearGradient>
-
-              <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="5" result="blur" />
-                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-              </filter>
-            </defs>
-
-            <style>{`
-              @keyframes pulseHotspot {
-                0%, 100% { transform: scale(1); opacity: 0.9; }
-                50% { transform: scale(1.6); opacity: 0.2; }
-              }
-              @keyframes moveLens {
-                0%, 100% { transform: translate(0px, 0px) rotate(0deg); }
-                50% { transform: translate(5px, -7px) rotate(3deg); }
-              }
-              @keyframes dashConnect {
-                to { stroke-dashoffset: -40; }
-              }
-              @keyframes nodeGlow {
-                0%, 100% { r: 5; opacity: 0.8; }
-                50% { r: 7; opacity: 1; filter: drop-shadow(0 0 8px #F6AD55); }
-              }
-              @keyframes silhouettePulse {
-                0%, 100% { opacity: 0.8; }
-                50% { opacity: 0.98; }
-              }
-              .hotspot-ring {
-                transform-origin: 270px 130px;
-                animation: pulseHotspot 2.5s infinite ease-in-out;
-              }
-              .magnifier-group {
-                transform-origin: 210px 190px;
-                animation: moveLens 5.5s infinite ease-in-out;
-              }
-              .data-line-animated {
-                stroke-dasharray: 6 6;
-                animation: dashConnect 3s linear infinite;
-              }
-              .glowing-node-1 { animation: nodeGlow 2.2s infinite ease-in-out 0s; }
-              .glowing-node-2 { animation: nodeGlow 2.2s infinite ease-in-out 0.7s; }
-              .glowing-node-3 { animation: nodeGlow 2.2s infinite ease-in-out 1.4s; }
-              .silhouette-art { animation: silhouettePulse 4s infinite ease-in-out; }
-            `}</style>
-
-            {/* Outer Cyber Shield Frame */}
-            <path
-              d="M 200,24 L 330,90 L 330,240 L 200,376 L 70,240 L 70,90 Z"
-              fill="#0F141C"
-              fillOpacity="0.9"
-              stroke="url(#shieldGrad)"
-              strokeWidth="4"
-              strokeLinejoin="round"
-            />
-
-            {/* Inner Tech Grid lines */}
-            <path
-              d="M 120,90 H 280 M 100,150 H 300 M 100,210 H 300 M 120,270 H 280"
-              stroke="#D65A31"
-              strokeOpacity="0.15"
-              strokeWidth="1.5"
-            />
-            <path
-              d="M 150,70 V 310 M 200,50 V 350 M 250,70 V 310"
-              stroke="#D65A31"
-              strokeOpacity="0.15"
-              strokeWidth="1.5"
-            />
-
-            {/* 1. DATA ANALYTICS BARS */}
-            <g opacity="0.85">
-              <rect x="110" y="200" width="16" height="60" rx="3" fill="url(#barGrad1)" />
-              <rect x="134" y="160" width="16" height="100" rx="3" fill="url(#barGrad2)" />
-              <rect x="158" y="180" width="16" height="80" rx="3" fill="url(#barGrad3)" />
-            </g>
-
-            {/* 2. HUMAN SILHOUETTE / SHADOW PROFILE */}
-            <g className="silhouette-art" opacity="0.85">
-              <circle cx="210" cy="155" r="22" fill="#CBD5E0" />
-              <path
-                d="M 170,225 C 170,192 185,182 210,182 C 235,182 250,192 250,225 V 250 H 170 Z"
-                fill="#CBD5E0"
-              />
-              <circle cx="210" cy="155" r="22" stroke="#883A2E" strokeWidth="1.5" fill="none" strokeDasharray="3 3" />
-            </g>
-
-            {/* 3. CONNECTED DATA POINTS / ANALYTICS NODES */}
-            <path
-              d="M 122,160 L 190,120 L 270,130 L 240,240 L 166,220"
-              stroke="#F6AD55"
-              strokeWidth="2.2"
-              fill="none"
-              className="data-line-animated"
-            />
-
-            <circle cx="122" cy="160" r="5" fill="#F6AD55" className="glowing-node-1" />
-            <circle cx="190" cy="120" r="5" fill="#63B3ED" className="glowing-node-2" />
-            <circle cx="240" cy="240" r="5" fill="#D65A31" className="glowing-node-3" />
-
-            {/* 4. CRIME HOTSPOT MAP LOCATION PIN & PULSING RADAR */}
-            <g transform="translate(270, 130)">
-              <circle cx="0" cy="0" r="16" fill="none" stroke="#E53E3E" strokeWidth="2" className="hotspot-ring" />
-              <path
-                d="M 0,-16 C -7,-16 -12,-11 -12,-4 C -12,5 0,16 0,16 C 0,16 12,5 12,-4 C 12,-11 7,-16 0,-16 Z"
-                fill="#E53E3E"
-                filter="url(#glow)"
-              />
-              <circle cx="0" cy="-4" r="4" fill="#FFFFFF" />
-            </g>
-
-            {/* 5. MAGNIFYING GLASS / ANALYTICS INVESTIGATION LENS */}
-            <g className="magnifier-group">
-              <circle
-                cx="200"
-                cy="190"
-                r="44"
-                fill="url(#lensGrad)"
-                stroke="#63B3ED"
-                strokeWidth="3.5"
-                filter="url(#glow)"
-              />
-              <path
-                d="M 170,172 A 34 34 0 0 1 218,158"
-                stroke="#FFFFFF"
-                strokeWidth="3"
-                strokeLinecap="round"
-                opacity="0.6"
-              />
-              <line x1="170" y1="190" x2="230" y2="190" stroke="#63B3ED" strokeWidth="1" strokeDasharray="2 2" opacity="0.7" />
-              <line x1="200" y1="160" x2="200" y2="220" stroke="#63B3ED" strokeWidth="1" strokeDasharray="2 2" opacity="0.7" />
-              <path
-                d="M 232,222 L 275,265"
-                stroke="#D65A31"
-                strokeWidth="9"
-                strokeLinecap="round"
-              />
-              <path
-                d="M 232,222 L 275,265"
-                stroke="#F6AD55"
-                strokeWidth="4"
-                strokeLinecap="round"
-              />
-            </g>
-          </svg>
-        </div>
-
-        {/* 2. PROJECT BRANDING TITLE */}
-        <div className="space-y-3">
-          <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black tracking-widest bg-gradient-to-r from-[#FFFFFF] via-[#E2E8F0] to-[#D65A31] bg-clip-text text-transparent drop-shadow-[0_4px_25px_rgba(0,0,0,0.8)] uppercase font-sans">
-            CRIMELYTICS
+          {/* Main Title & Subtitle */}
+          <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white mb-6">
+            <span className="block">{t('appName', 'Crime Data Analytics')}</span>
+            <span className="block mt-2 bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-400 bg-clip-text text-transparent">
+              {t('tagline', 'Analyze. Understand. Predict.')}
+            </span>
           </h1>
-          <div className="flex items-center justify-center space-x-3 text-xs sm:text-sm font-bold tracking-[0.35em] text-[#D65A31] uppercase">
-            <span className="w-8 h-[1px] bg-[#D65A31]/50" />
-            <span>CRIME DATA ANALYTICS</span>
-            <span className="w-8 h-[1px] bg-[#D65A31]/50" />
+
+          <p className="mx-auto max-w-3xl text-sm sm:text-base lg:text-lg text-slate-300 leading-relaxed mb-10">
+            A centralized law enforcement intelligence platform engineered to transform raw multi-state crime data into actionable spatial trends, resolution metrics, predictive risk models, and executive regional briefings.
+          </p>
+
+          {/* CTA Buttons */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link
+              to={user ? "/dashboard" : "/login"}
+              className="w-full sm:w-auto flex items-center justify-center space-x-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 px-8 py-3.5 text-sm font-bold text-white shadow-xl shadow-cyan-500/25 hover:shadow-cyan-500/40 hover:scale-[1.02] transition-all cursor-pointer"
+            >
+              <span>{t('exploreData', 'Explore Crime Data')}</span>
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+
+            {!user && (
+              <Link
+                to="/register"
+                className="w-full sm:w-auto flex items-center justify-center space-x-2 rounded-2xl border border-slate-700 bg-slate-900/80 px-8 py-3.5 text-sm font-semibold text-slate-200 hover:border-slate-500 hover:bg-slate-800 transition-all"
+              >
+                <span>{t('register', 'Register Account')}</span>
+              </Link>
+            )}
+          </div>
+
+          {/* Live Ingested Dataset Stats Pill */}
+          <div className="mt-14 inline-flex flex-wrap items-center justify-center gap-6 rounded-2xl border border-slate-800 bg-[#0c1326]/80 px-6 py-3.5 backdrop-blur-xl shadow-xl">
+            <div className="flex items-center space-x-2">
+              <Database className="h-4 w-4 text-cyan-400" />
+              <span className="text-xs text-slate-400">Preloaded Datasets:</span>
+              <span className="text-xs font-bold text-white">{datasets.length} Active Stores</span>
+            </div>
+            <span className="hidden sm:inline text-slate-700">|</span>
+            <div className="flex items-center space-x-2">
+              <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
+              <span className="text-xs text-slate-400">Total Verified Records:</span>
+              <span className="text-xs font-bold font-mono text-emerald-400">{totalLoadedRecords.toLocaleString()} Rows</span>
+            </div>
+            <span className="hidden sm:inline text-slate-700">|</span>
+            <div className="flex items-center space-x-2">
+              <CheckCircle2 className="h-4 w-4 text-blue-400" />
+              <span className="text-xs text-slate-400">Data Integrity:</span>
+              <span className="text-xs font-bold text-cyan-300">100% Real Ingested Data</span>
+            </div>
           </div>
         </div>
+      </section>
 
-        {/* 3. CENTERED ACTION BUTTONS */}
-        <div className="pt-6 flex flex-col sm:flex-row items-center justify-center gap-4 w-full max-w-md">
-          <button
-            onClick={handleGetStarted}
-            id="overview-enter-portal-btn"
-            className="w-full sm:w-auto flex-1 inline-flex items-center justify-center space-x-3 px-8 py-4 rounded-2xl bg-gradient-to-r from-[#883A2E] via-[#D65A31] to-[#883A2E] bg-[length:200%_auto] text-white font-bold text-sm tracking-wider uppercase shadow-[0_0_25px_rgba(214,90,49,0.4)] hover:shadow-[0_0_35px_rgba(214,90,49,0.6)] hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 cursor-pointer border border-[#D65A31]/40"
-          >
-            <LogIn className="h-5 w-5" />
-            <span>{user ? 'Enter Dashboard' : 'Enter Portal / Login'}</span>
-            <ArrowRight className="h-5 w-5" />
-          </button>
+      {/* Feature Cards Grid */}
+      <section className="py-16 bg-[#090e1f]/50 border-t border-slate-800/80">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl sm:text-3xl font-bold text-white">
+              Command-Grade Analytical Capabilities
+            </h2>
+            <p className="mt-2 text-xs sm:text-sm text-slate-400">
+              Engineered with zero hardcoded statistics — every chart, percentage, and metric reflects real database records.
+            </p>
+          </div>
 
-          <Link
-            to="/emergency"
-            className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 px-6 py-4 rounded-2xl border border-[#CBD5E0]/20 bg-[#1A202C]/60 text-xs font-semibold text-[#E2E8F0] hover:border-[#D65A31] hover:bg-[#2D3748]/80 transition-all backdrop-blur-md"
-          >
-            <ShieldAlert className="h-4 w-4 text-[#E53E3E]" />
-            <span>Report Incident</span>
-          </Link>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {featureCards.map((feat, i) => {
+              const Icon = feat.icon;
+              return (
+                <div
+                  key={i}
+                  className={`group relative overflow-hidden rounded-2xl border ${feat.border} bg-gradient-to-b ${feat.color} p-6 backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl`}
+                >
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="rounded-xl bg-slate-900/80 p-3 border border-slate-800">
+                      <Icon className={`h-6 w-6 ${feat.iconColor}`} />
+                    </div>
+                    <h3 className="font-bold text-base text-white">{feat.title}</h3>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">{feat.desc}</p>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      </section>
+
+      {/* Security & Data Authenticity Notice */}
+      <section className="py-16 border-t border-slate-800/80">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
+          <div className="rounded-3xl border border-cyan-500/20 bg-gradient-to-r from-cyan-950/30 via-slate-900/60 to-blue-950/30 p-8 sm:p-10 backdrop-blur-xl">
+            <Shield className="mx-auto h-12 w-12 text-cyan-400 mb-4" />
+            <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
+              Authentic Law Enforcement Data Standard
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-6">
+              All computations across State, District, City, and Year filters operate dynamically over our unified PostgreSQL / SQLite relational data store. When a filter combination yields no recorded incidents, the platform explicitly signals "No data available for this selection."
+            </p>
+            <Link
+              to={user ? "/dashboard" : "/login"}
+              className="inline-flex items-center space-x-2 rounded-xl bg-cyan-500 px-6 py-2.5 text-xs font-bold text-slate-950 hover:bg-cyan-400 transition-colors"
+            >
+              <span>Launch Platform</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+      </section>
     </div>
   );
 };

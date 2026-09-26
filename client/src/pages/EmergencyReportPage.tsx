@@ -116,9 +116,7 @@ export const EmergencyReportPage: React.FC = () => {
       },
       (error) => {
         setIsLocating(false);
-        setLatitude(null);
-        setLongitude(null);
-        setLocationError(`GPS location unavailable or permission denied (${error.message}). Please enter your incident street/landmark address manually below.`);
+        setLocationError(`Could not auto-fetch GPS: ${error.message}. Please enter address below.`);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -145,16 +143,7 @@ export const EmergencyReportPage: React.FC = () => {
     try {
       audioChunksRef.current = [];
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      const supportedType = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/ogg;codecs=opus',
-        'audio/mp4',
-        'audio/aac'
-      ].find(type => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) || '';
-
-      const recorder = supportedType ? new MediaRecorder(stream, { mimeType: supportedType }) : new MediaRecorder(stream);
+      const recorder = new MediaRecorder(stream);
 
       recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
@@ -163,8 +152,7 @@ export const EmergencyReportPage: React.FC = () => {
       };
 
       recorder.onstop = () => {
-        const mime = recorder.mimeType || supportedType || 'audio/webm';
-        const blob = new Blob(audioChunksRef.current, { type: mime });
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
         setAudioBlob(blob);
         const url = URL.createObjectURL(blob);
         setAudioUrl(url);
@@ -178,7 +166,7 @@ export const EmergencyReportPage: React.FC = () => {
 
       timerIntervalRef.current = setInterval(() => {
         setRecordingTime(prev => {
-          if (prev >= 180) { // Max 3 mins
+          if (prev >= 120) { // Auto stop at 2 mins
             stopRecording();
             return prev;
           }
@@ -249,8 +237,8 @@ export const EmergencyReportPage: React.FC = () => {
       formData.append('district', districtName);
       formData.append('city', districtName);
       formData.append('location_address', locationAddress || 'GPS Location Transmitted');
-      if (latitude !== null && latitude !== undefined) formData.append('latitude', String(latitude));
-      if (longitude !== null && longitude !== undefined) formData.append('longitude', String(longitude));
+      if (latitude) formData.append('latitude', String(latitude));
+      if (longitude) formData.append('longitude', String(longitude));
       formData.append('citizen_name', isAnonymous ? 'Anonymous Citizen' : (citizenName || 'Citizen in Distress'));
       if (!isAnonymous && citizenPhone) formData.append('citizen_phone', citizenPhone);
 
@@ -260,7 +248,6 @@ export const EmergencyReportPage: React.FC = () => {
 
       if (audioBlob) {
         formData.append('audio', audioBlob, 'emergency_voice.webm');
-        formData.append('audio_duration', String(recordingTime));
       }
 
       const res = await api.submitEmergencyReport(formData);
@@ -305,7 +292,7 @@ export const EmergencyReportPage: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#FFF7F4] text-[#2B1F1D] py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#070b16] text-slate-100 py-8 px-4 sm:px-6 lg:px-8">
       {/* Hidden audio element for preview */}
       {audioUrl && (
         <audio
@@ -318,25 +305,25 @@ export const EmergencyReportPage: React.FC = () => {
 
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Top Emergency Hotlines Banner */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#542A20] via-[#883A2E] to-[#542A20] border border-[#883A2E] p-4 sm:p-5 shadow-xl text-white">
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-rose-950/80 via-red-900/60 to-rose-950/80 border border-rose-600/40 p-4 sm:p-5 shadow-2xl backdrop-blur-xl">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center space-x-3.5">
-              <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#D65A31] text-white shadow-lg shadow-[#D65A31]/40 animate-pulse">
+              <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-600 text-white shadow-lg shadow-rose-600/50 animate-pulse">
                 <Radio className="h-6 w-6" />
               </div>
               <div>
                 <div className="flex items-center space-x-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#FAF0EC] font-mono">
+                  <span className="text-xs font-bold uppercase tracking-wider text-rose-300 font-mono">
                     Official Citizen SOS Portal
                   </span>
-                  <span className="inline-flex items-center rounded-full bg-[#D65A31]/30 px-2 py-0.5 text-[10px] font-bold text-white border border-[#D65A31]/40">
+                  <span className="inline-flex items-center rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-300 border border-rose-500/30">
                     LIVE RESPONSE
                   </span>
                 </div>
                 <h1 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">
                   🚨 Citizen Emergency Crime Reporting
                 </h1>
-                <p className="text-xs text-[#FAF0EC]/90 mt-0.5">
+                <p className="text-xs text-rose-200/80 mt-0.5">
                   Instant live dispatch to nearest police control unit with GPS coordinates & media.
                 </p>
               </div>
@@ -345,16 +332,16 @@ export const EmergencyReportPage: React.FC = () => {
             <div className="flex items-center space-x-2 w-full sm:w-auto">
               <a
                 href="tel:112"
-                className="flex-1 sm:flex-none flex items-center justify-center space-x-2 rounded-xl bg-[#D65A31] px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-[#D65A31]/30 hover:bg-[#C47A5A] transition-all active:scale-95"
+                className="flex-1 sm:flex-none flex items-center justify-center space-x-2 rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-rose-600/30 hover:bg-rose-500 transition-all active:scale-95"
               >
                 <PhoneCall className="h-4 w-4" />
                 <span>Call 112 (National SOS)</span>
               </a>
               <Link
                 to="/police-emergency"
-                className="hidden sm:flex items-center space-x-1.5 rounded-xl border border-white/20 bg-white/10 px-3.5 py-2.5 text-xs font-medium text-white hover:bg-white/20 transition-all"
+                className="hidden sm:flex items-center space-x-1.5 rounded-xl border border-slate-700 bg-slate-900/80 px-3.5 py-2.5 text-xs font-medium text-slate-300 hover:border-cyan-500/50 hover:text-cyan-400 transition-all"
               >
-                <Shield className="h-4 w-4 text-[#FAF0EC]" />
+                <Shield className="h-4 w-4 text-cyan-400" />
                 <span>Police Command</span>
               </Link>
             </div>
@@ -363,57 +350,57 @@ export const EmergencyReportPage: React.FC = () => {
 
         {/* SUCCESS CONFIRMATION MODAL */}
         {submissionSuccess && submittedReport && (
-          <div className="rounded-2xl border border-[#2E7D32]/30 bg-[#FFFDFC] p-6 sm:p-8 shadow-xl text-center space-y-4 animate-in zoom-in-95 duration-200">
+          <div className="rounded-2xl border border-emerald-500/40 bg-[#091522]/95 p-6 sm:p-8 shadow-2xl backdrop-blur-xl animate-in zoom-in-95 duration-200">
             <div className="text-center space-y-4">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#2E7D32]/10 text-[#2E7D32] border border-[#2E7D32]/30 shadow-md">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-lg shadow-emerald-500/20">
                 <CheckCircle2 className="h-8 w-8" />
               </div>
               <div>
-                <h2 className="text-2xl font-black text-[#2B1F1D]">EMERGENCY ALERT TRANSMITTED</h2>
-                <p className="text-sm text-[#2E7D32] font-semibold mt-1">
+                <h2 className="text-2xl font-black text-white">EMERGENCY ALERT TRANSMITTED</h2>
+                <p className="text-sm text-emerald-400 font-medium mt-1">
                   Police Control Center has received your alert and dispatched the nearest response team.
                 </p>
               </div>
 
               {/* Reference ID Card */}
-              <div className="max-w-md mx-auto rounded-xl border border-[#EEDFD9] bg-[#FAF0EC] p-4 text-left space-y-2.5">
-                <div className="flex items-center justify-between border-b border-[#EEDFD9] pb-2">
-                  <span className="text-xs text-[#7A6360]">Emergency Tracking ID</span>
-                  <span className="font-mono text-base font-bold text-[#883A2E] tracking-wider">
+              <div className="max-w-md mx-auto rounded-xl border border-slate-700/80 bg-slate-900/90 p-4 text-left space-y-2.5">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-xs text-slate-400">Emergency Tracking ID</span>
+                  <span className="font-mono text-base font-bold text-cyan-400 tracking-wider">
                     {submittedReport.report_code}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-[#7A6360]">Incident:</span>
-                    <p className="font-medium text-[#2B1F1D] truncate">{submittedReport.incident_type}</p>
+                    <span className="text-slate-400">Incident:</span>
+                    <p className="font-medium text-slate-200 truncate">{submittedReport.incident_type}</p>
                   </div>
                   <div>
-                    <span className="text-[#7A6360]">Severity:</span>
-                    <span className="inline-block px-2 py-0.5 rounded font-bold text-[10px] bg-[#883A2E]/10 text-[#883A2E] border border-[#883A2E]/20">
+                    <span className="text-slate-400">Severity:</span>
+                    <span className="inline-block px-2 py-0.5 rounded font-bold text-[10px] bg-rose-500/20 text-rose-400 border border-rose-500/30">
                       {submittedReport.severity}
                     </span>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-[#7A6360]">Location Transmitted:</span>
-                    <p className="font-medium text-[#2B1F1D] truncate">{submittedReport.location_address}</p>
+                    <span className="text-slate-400">Location Transmitted:</span>
+                    <p className="font-medium text-slate-300 truncate">{submittedReport.location_address}</p>
                   </div>
                 </div>
               </div>
 
               {/* Live Status Progress Bar */}
               <div className="max-w-md mx-auto pt-2">
-                <div className="flex items-center justify-between text-[11px] font-semibold text-[#7A6360] mb-2">
-                  <span className="text-[#883A2E] flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-[#883A2E] animate-ping"></span>
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-2">
+                  <span className="text-cyan-400 flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping"></span>
                     1. Alert Received
                   </span>
                   <span>2. Reviewing</span>
                   <span>3. Patrol Assigned</span>
                   <span>4. Responding</span>
                 </div>
-                <div className="w-full bg-[#EEDFD9] rounded-full h-2 overflow-hidden">
-                  <div className="bg-gradient-to-r from-[#883A2E] to-[#D65A31] h-2 rounded-full w-1/4 transition-all duration-500"></div>
+                <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                  <div className="bg-gradient-to-r from-cyan-500 to-emerald-500 h-2 rounded-full w-1/4 transition-all duration-500"></div>
                 </div>
               </div>
 
@@ -426,13 +413,13 @@ export const EmergencyReportPage: React.FC = () => {
                     removePhoto();
                     resetAudio();
                   }}
-                  className="w-full sm:w-auto rounded-xl border border-[#EEDFD9] bg-[#FFFDFC] px-5 py-2.5 text-xs font-semibold text-[#2B1F1D] hover:bg-[#FAF0EC] transition-colors shadow-xs"
+                  className="w-full sm:w-auto rounded-xl border border-slate-700 bg-slate-800 px-5 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors"
                 >
                   File Another Report
                 </button>
                 <Link
                   to="/police-emergency"
-                  className="w-full sm:w-auto flex items-center justify-center space-x-2 rounded-xl bg-[#883A2E] hover:bg-[#542A20] px-5 py-2.5 text-xs font-bold text-white shadow-sm transition-colors"
+                  className="w-full sm:w-auto flex items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition-all"
                 >
                   <Shield className="h-4 w-4" />
                   <span>View in Police Command Hub</span>
@@ -446,19 +433,19 @@ export const EmergencyReportPage: React.FC = () => {
         {!submissionSuccess && (
           <form onSubmit={handleSubmit} className="space-y-6">
             {errorMessage && (
-              <div className="rounded-xl border border-rose-500/40 bg-rose-50 p-4 text-xs text-rose-800 flex items-center space-x-3">
-                <AlertTriangle className="h-5 w-5 shrink-0 text-rose-500" />
+              <div className="rounded-xl border border-rose-500/40 bg-rose-950/40 p-4 text-xs text-rose-300 flex items-center space-x-3">
+                <AlertTriangle className="h-5 w-5 shrink-0 text-rose-400" />
                 <span>{errorMessage}</span>
               </div>
             )}
 
             {/* Step 1: Incident Categorization & Severity */}
-            <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFFDFC] p-5 sm:p-6 shadow-sm space-y-5">
-              <div className="flex items-center space-x-2.5 border-b border-[#EEDFD9] pb-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#883A2E]/10 text-[#883A2E] font-bold text-xs border border-[#883A2E]/20">
+            <div className="rounded-2xl border border-slate-800/80 bg-[#0c1329]/80 p-5 sm:p-6 shadow-xl backdrop-blur-md space-y-5">
+              <div className="flex items-center space-x-2.5 border-b border-slate-800 pb-3">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-500/20 text-rose-400 font-bold text-xs border border-rose-500/30">
                   1
                 </div>
-                <h2 className="text-sm font-bold uppercase tracking-wider text-[#2B1F1D]">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">
                   Incident Category & Priority
                 </h2>
               </div>
@@ -466,13 +453,13 @@ export const EmergencyReportPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {/* Incident Type */}
                 <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-[#7A6360]">
-                    What type of emergency is happening? <span className="text-[#883A2E]">*</span>
+                  <label className="block text-xs font-semibold text-slate-300">
+                    What type of emergency is happening? <span className="text-rose-400">*</span>
                   </label>
                   <select
                     value={incidentType}
                     onChange={(e) => setIncidentType(e.target.value)}
-                    className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFFDFC] px-3.5 py-2.5 text-xs text-[#2B1F1D] focus:border-[#883A2E] focus:outline-none shadow-xs"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3.5 py-2.5 text-xs text-slate-100 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 focus:outline-none"
                   >
                     {incidentTypes.map(t => (
                       <option key={t} value={t}>{t}</option>
@@ -482,23 +469,23 @@ export const EmergencyReportPage: React.FC = () => {
 
                 {/* Severity Radio Buttons */}
                 <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-[#7A6360]">
-                    Threat Level / Priority <span className="text-[#883A2E]">*</span>
+                  <label className="block text-xs font-semibold text-slate-300">
+                    Threat Level / Priority <span className="text-rose-400">*</span>
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {[
-                      { level: 'CRITICAL', label: 'Critical', activeStyle: 'border-[#883A2E] bg-[#883A2E] text-white shadow-sm' },
-                      { level: 'HIGH', label: 'High', activeStyle: 'border-[#D65A31] bg-[#D65A31] text-white shadow-sm' },
-                      { level: 'MEDIUM', label: 'Medium', activeStyle: 'border-[#C47A5A] bg-[#C47A5A] text-white shadow-sm' }
+                      { level: 'CRITICAL', label: 'Critical', color: 'border-rose-500 bg-rose-950/40 text-rose-400 shadow-rose-950/30' },
+                      { level: 'HIGH', label: 'High', color: 'border-amber-500 bg-amber-950/40 text-amber-400 shadow-amber-950/30' },
+                      { level: 'MEDIUM', label: 'Medium', color: 'border-blue-500 bg-blue-950/40 text-blue-400 shadow-blue-950/30' }
                     ].map(s => (
                       <button
                         type="button"
                         key={s.level}
                         onClick={() => setSeverity(s.level as any)}
-                        className={`rounded-xl border py-2 text-xs font-bold transition-all cursor-pointer ${
+                        className={`rounded-xl border py-2 text-xs font-bold transition-all ${
                           severity === s.level
-                            ? s.activeStyle
-                            : 'border-[#EEDFD9] bg-[#FAF0EC] text-[#7A6360] hover:bg-[#EEDFD9]'
+                            ? `${s.color} shadow-lg ring-1 ring-white/20 scale-[1.02]`
+                            : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800'
                         }`}
                       >
                         {s.label}
@@ -510,12 +497,12 @@ export const EmergencyReportPage: React.FC = () => {
             </div>
 
             {/* Step 2: Media Attachments (Photo + Voice Audio) */}
-            <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFFDFC] p-5 sm:p-6 shadow-sm space-y-5">
-              <div className="flex items-center space-x-2.5 border-b border-[#EEDFD9] pb-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#883A2E]/10 text-[#883A2E] font-bold text-xs border border-[#883A2E]/20">
+            <div className="rounded-2xl border border-slate-800/80 bg-[#0c1329]/80 p-5 sm:p-6 shadow-xl backdrop-blur-md space-y-5">
+              <div className="flex items-center space-x-2.5 border-b border-slate-800 pb-3">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-500/20 text-cyan-400 font-bold text-xs border border-cyan-500/30">
                   2
                 </div>
-                <h2 className="text-sm font-bold uppercase tracking-wider text-[#2B1F1D]">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">
                   Media Evidence (Photo & Voice Message)
                 </h2>
               </div>
@@ -523,7 +510,7 @@ export const EmergencyReportPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {/* 1. PHOTO CAPTURE / UPLOAD */}
                 <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-[#7A6360]">
+                  <label className="block text-xs font-semibold text-slate-300">
                     📸 Incident Photo (Camera / Gallery)
                   </label>
                   <input
@@ -536,7 +523,7 @@ export const EmergencyReportPage: React.FC = () => {
                   />
 
                   {photoPreview ? (
-                    <div className="relative rounded-xl border border-[#EEDFD9] bg-[#FAF0EC] p-2 overflow-hidden group">
+                    <div className="relative rounded-xl border border-slate-700 bg-slate-900 p-2 overflow-hidden group">
                       <img
                         src={photoPreview}
                         alt="Incident Preview"
@@ -545,12 +532,12 @@ export const EmergencyReportPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={removePhoto}
-                        className="absolute top-4 right-4 rounded-full bg-[#883A2E] text-white p-1.5 shadow-lg hover:bg-[#542A20] transition-colors"
+                        className="absolute top-4 right-4 rounded-full bg-rose-600/90 text-white p-1.5 shadow-lg hover:bg-rose-500 transition-colors"
                         title="Remove Photo"
                       >
                         <X className="h-4 w-4" />
                       </button>
-                      <div className="absolute bottom-4 left-4 rounded-md bg-[#542A20]/80 px-2 py-0.5 text-[10px] text-white backdrop-blur-sm">
+                      <div className="absolute bottom-4 left-4 rounded-md bg-black/70 px-2 py-0.5 text-[10px] text-slate-300 backdrop-blur-sm">
                         Photo Ready
                       </div>
                     </div>
@@ -558,15 +545,15 @@ export const EmergencyReportPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="flex flex-col items-center justify-center w-full h-44 rounded-xl border-2 border-dashed border-[#EEDFD9] bg-[#FAF0EC] hover:bg-[#FFFDFC] hover:border-[#883A2E] transition-all group cursor-pointer"
+                      className="flex flex-col items-center justify-center w-full h-44 rounded-xl border-2 border-dashed border-slate-700/80 bg-slate-900/50 hover:bg-slate-900 hover:border-cyan-500/50 transition-all group"
                     >
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#883A2E]/10 text-[#883A2E] group-hover:scale-110 group-hover:bg-[#883A2E]/20 transition-all">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-400 group-hover:scale-110 group-hover:bg-cyan-500/20 transition-all">
                         <Camera className="h-6 w-6" />
                       </div>
-                      <span className="mt-2 text-xs font-semibold text-[#2B1F1D]">
+                      <span className="mt-2 text-xs font-semibold text-slate-300">
                         Take Snapshot or Upload Image
                       </span>
-                      <span className="text-[10px] text-[#7A6360] mt-0.5">
+                      <span className="text-[10px] text-slate-500 mt-0.5">
                         JPG, PNG, HEIC up to 25MB
                       </span>
                     </button>
@@ -575,25 +562,25 @@ export const EmergencyReportPage: React.FC = () => {
 
                 {/* 2. VOICE AUDIO RECORDING */}
                 <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-[#7A6360]">
+                  <label className="block text-xs font-semibold text-slate-300">
                     🎤 Voice Message (Record description)
                   </label>
 
-                  <div className="flex flex-col items-center justify-center w-full h-44 rounded-xl border border-[#EEDFD9] bg-[#FAF0EC] p-4 space-y-3">
+                  <div className="flex flex-col items-center justify-center w-full h-44 rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
                     {/* Recording in progress */}
                     {isRecording ? (
                       <div className="flex flex-col items-center space-y-3">
-                        <div className="flex items-center space-x-2 text-[#883A2E] font-mono text-base font-bold animate-pulse">
-                          <span className="h-3 w-3 rounded-full bg-[#883A2E]"></span>
+                        <div className="flex items-center space-x-2 text-rose-400 font-mono text-base font-bold animate-pulse">
+                          <span className="h-3 w-3 rounded-full bg-rose-500"></span>
                           <span>Recording: {formatTime(recordingTime)}</span>
                         </div>
-                        <p className="text-[11px] text-[#7A6360] text-center max-w-xs">
+                        <p className="text-[11px] text-slate-400 text-center max-w-xs">
                           Speak clearly. Describe suspects, weapons, direction of movement, landmarks...
                         </p>
                         <button
                           type="button"
                           onClick={stopRecording}
-                          className="flex items-center space-x-2 rounded-xl bg-[#883A2E] px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-[#542A20] transition-all cursor-pointer"
+                          className="flex items-center space-x-2 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-rose-600/30 hover:bg-rose-500 transition-all"
                         >
                           <Square className="h-4 w-4 fill-white" />
                           <span>Stop Recording</span>
@@ -602,7 +589,7 @@ export const EmergencyReportPage: React.FC = () => {
                     ) : audioBlob ? (
                       /* Audio Recorded & Ready */
                       <div className="w-full flex flex-col items-center space-y-3">
-                        <div className="flex items-center space-x-2 text-[#2E7D32] text-xs font-bold">
+                        <div className="flex items-center space-x-2 text-emerald-400 text-xs font-bold">
                           <CheckCircle2 className="h-4 w-4" />
                           <span>Voice Message Recorded ({formatTime(recordingTime)})</span>
                         </div>
@@ -611,7 +598,7 @@ export const EmergencyReportPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={togglePlayAudio}
-                            className="flex items-center space-x-1.5 rounded-xl bg-[#883A2E] px-4 py-2 text-xs font-semibold text-white hover:bg-[#542A20] transition-colors shadow-sm cursor-pointer"
+                            className="flex items-center space-x-1.5 rounded-xl bg-cyan-600 px-4 py-2 text-xs font-semibold text-white hover:bg-cyan-500 transition-colors shadow-md shadow-cyan-600/20"
                           >
                             {isPlayingAudio ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                             <span>{isPlayingAudio ? 'Pause' : 'Play Preview'}</span>
@@ -619,9 +606,9 @@ export const EmergencyReportPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={resetAudio}
-                            className="flex items-center space-x-1 rounded-xl border border-[#EEDFD9] bg-[#FFFDFC] px-3 py-2 text-xs text-[#2B1F1D] hover:bg-[#FAF0EC] transition-colors cursor-pointer"
+                            className="flex items-center space-x-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 transition-colors"
                           >
-                            <RotateCcw className="h-3.5 w-3.5 text-[#7A6360]" />
+                            <RotateCcw className="h-3.5 w-3.5" />
                             <span>Re-record</span>
                           </button>
                         </div>
@@ -629,18 +616,18 @@ export const EmergencyReportPage: React.FC = () => {
                     ) : (
                       /* Idle State */
                       <div className="flex flex-col items-center space-y-2 text-center">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#883A2E]/10 text-[#883A2E]">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-rose-500/10 text-rose-400">
                           <Mic className="h-6 w-6" />
                         </div>
                         <button
                           type="button"
                           onClick={startRecording}
-                          className="flex items-center space-x-2 rounded-xl bg-[#883A2E] hover:bg-[#542A20] px-4 py-2 text-xs font-bold text-white shadow-sm transition-all cursor-pointer"
+                          className="flex items-center space-x-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-rose-600/20 hover:from-rose-500 hover:to-red-500 transition-all"
                         >
                           <Mic className="h-4 w-4" />
                           <span>Start Voice Recording</span>
                         </button>
-                        <span className="text-[10px] text-[#7A6360]">
+                        <span className="text-[10px] text-slate-500">
                           Hands-free voice note for rapid reporting
                         </span>
                       </div>
@@ -651,13 +638,13 @@ export const EmergencyReportPage: React.FC = () => {
             </div>
 
             {/* Step 3: Location Details & GPS */}
-            <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFFDFC] p-5 sm:p-6 shadow-sm space-y-5">
-              <div className="flex items-center justify-between border-b border-[#EEDFD9] pb-3">
+            <div className="rounded-2xl border border-slate-800/80 bg-[#0c1329]/80 p-5 sm:p-6 shadow-xl backdrop-blur-md space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div className="flex items-center space-x-2.5">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#883A2E]/10 text-[#883A2E] font-bold text-xs border border-[#883A2E]/20">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400 font-bold text-xs border border-emerald-500/30">
                     3
                   </div>
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-[#2B1F1D]">
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">
                     Incident Location (GPS Coordinates)
                   </h2>
                 </div>
@@ -666,7 +653,7 @@ export const EmergencyReportPage: React.FC = () => {
                   type="button"
                   onClick={fetchCurrentLocation}
                   disabled={isLocating}
-                  className="flex items-center space-x-1.5 rounded-lg border border-[#EEDFD9] bg-[#FAF0EC] px-2.5 py-1 text-xs text-[#883A2E] hover:bg-[#EEDFD9] transition-colors disabled:opacity-50 cursor-pointer font-medium"
+                  className="flex items-center space-x-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs text-cyan-400 hover:border-cyan-500/50 hover:bg-slate-800 transition-colors disabled:opacity-50"
                 >
                   <MapPin className="h-3.5 w-3.5" />
                   <span>{isLocating ? 'Acquiring GPS...' : 'Refresh GPS'}</span>
@@ -674,7 +661,7 @@ export const EmergencyReportPage: React.FC = () => {
               </div>
 
               {locationError && (
-                <div className="text-[11px] text-[#D65A31] bg-[#FAF0EC] border border-[#EEDFD9] p-2.5 rounded-lg">
+                <div className="text-[11px] text-amber-400 bg-amber-950/30 border border-amber-800/40 p-2.5 rounded-lg">
                   {locationError}
                 </div>
               )}
@@ -682,7 +669,7 @@ export const EmergencyReportPage: React.FC = () => {
               {/* Coordinates Display */}
               {latitude && longitude && (
                 <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="inline-flex items-center space-x-1 rounded-md bg-[#2E7D32]/10 px-2.5 py-1 text-[#2E7D32] border border-[#2E7D32]/30 font-mono">
+                  <span className="inline-flex items-center space-x-1 rounded-md bg-emerald-950/80 px-2.5 py-1 text-emerald-400 border border-emerald-800/50 font-mono">
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     <span>GPS Acquired: {latitude}, {longitude}</span>
                   </span>
@@ -690,7 +677,7 @@ export const EmergencyReportPage: React.FC = () => {
                     href={`https://www.google.com/maps?q=${latitude},${longitude}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-[#883A2E] hover:underline text-[11px] inline-flex items-center gap-1 font-medium"
+                    className="text-cyan-400 hover:underline text-[11px] inline-flex items-center gap-1"
                   >
                     Open in Maps <ChevronRight className="h-3 w-3" />
                   </a>
@@ -699,7 +686,7 @@ export const EmergencyReportPage: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-3 space-y-1.5">
-                  <label className="block text-xs font-semibold text-[#7A6360]">
+                  <label className="block text-xs font-semibold text-slate-300">
                     Exact Address / Street / Landmark
                   </label>
                   <input
@@ -707,46 +694,46 @@ export const EmergencyReportPage: React.FC = () => {
                     value={locationAddress}
                     onChange={(e) => setLocationAddress(e.target.value)}
                     placeholder="e.g. Near T. Nagar Bus Terminus, Usman Road, Chennai"
-                    className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFFDFC] px-3.5 py-2.5 text-xs text-[#2B1F1D] placeholder-[#7A6360]/60 focus:border-[#883A2E] focus:outline-none shadow-xs"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-[#7A6360]">State / UT</label>
+                  <label className="block text-xs font-semibold text-slate-300">State / UT</label>
                   <input
                     type="text"
                     value={stateName}
                     onChange={(e) => setStateName(e.target.value)}
-                    className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFFDFC] px-3.5 py-2 text-xs text-[#2B1F1D] focus:border-[#883A2E] focus:outline-none shadow-xs"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3.5 py-2 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none"
                   />
                 </div>
 
                 <div className="space-y-1.5 md:col-span-2">
-                  <label className="block text-xs font-semibold text-[#7A6360]">District / City</label>
+                  <label className="block text-xs font-semibold text-slate-300">District / City</label>
                   <input
                     type="text"
                     value={districtName}
                     onChange={(e) => setDistrictName(e.target.value)}
-                    className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFFDFC] px-3.5 py-2 text-xs text-[#2B1F1D] focus:border-[#883A2E] focus:outline-none shadow-xs"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3.5 py-2 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none"
                   />
                 </div>
               </div>
             </div>
 
             {/* Step 4: Text Description & Citizen Details */}
-            <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFFDFC] p-5 sm:p-6 shadow-sm space-y-5">
-              <div className="flex items-center space-x-2.5 border-b border-[#EEDFD9] pb-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#883A2E]/10 text-[#883A2E] font-bold text-xs border border-[#883A2E]/20">
+            <div className="rounded-2xl border border-slate-800/80 bg-[#0c1329]/80 p-5 sm:p-6 shadow-xl backdrop-blur-md space-y-5">
+              <div className="flex items-center space-x-2.5 border-b border-slate-800 pb-3">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400 font-bold text-xs border border-amber-500/30">
                   4
                 </div>
-                <h2 className="text-sm font-bold uppercase tracking-wider text-[#2B1F1D]">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">
                   Description & Contact Information
                 </h2>
               </div>
 
               {/* Text Area */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-[#7A6360]">
+                <label className="block text-xs font-semibold text-slate-300">
                   Incident Description (Optional if voice recording provided)
                 </label>
                 <textarea
@@ -754,14 +741,14 @@ export const EmergencyReportPage: React.FC = () => {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Describe the incident in detail: what happened, physical description of suspects, vehicle registration number, weapons if any..."
-                  className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFFDFC] p-3 text-xs text-[#2B1F1D] placeholder-[#7A6360]/60 focus:border-[#883A2E] focus:outline-none shadow-xs"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900/90 p-3 text-xs text-slate-100 placeholder-slate-500 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 focus:outline-none"
                 />
               </div>
 
               {/* Citizen Details */}
-              <div className="border-t border-[#EEDFD9] pt-4 space-y-3">
+              <div className="border-t border-slate-800/80 pt-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-[#7A6360]">
+                  <label className="text-xs font-semibold text-slate-300">
                     Your Contact Information (Confidential for Police Dispatch)
                   </label>
                   <label className="flex items-center space-x-2 cursor-pointer">
@@ -769,9 +756,9 @@ export const EmergencyReportPage: React.FC = () => {
                       type="checkbox"
                       checked={isAnonymous}
                       onChange={(e) => setIsAnonymous(e.target.checked)}
-                      className="rounded border-[#EEDFD9] text-[#883A2E] focus:ring-[#883A2E] bg-[#FFFDFC]"
+                      className="rounded border-slate-700 text-rose-600 focus:ring-rose-500 bg-slate-900"
                     />
-                    <span className="text-xs text-[#7A6360]">Report Anonymously</span>
+                    <span className="text-xs text-slate-400">Report Anonymously</span>
                   </label>
                 </div>
 
@@ -783,7 +770,7 @@ export const EmergencyReportPage: React.FC = () => {
                         value={citizenName}
                         onChange={(e) => setCitizenName(e.target.value)}
                         placeholder="Your Full Name (e.g. Ramesh Kumar)"
-                        className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFFDFC] px-3.5 py-2 text-xs text-[#2B1F1D] focus:border-[#883A2E] focus:outline-none shadow-xs"
+                        className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3.5 py-2 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none"
                       />
                     </div>
                     <div>
@@ -792,7 +779,7 @@ export const EmergencyReportPage: React.FC = () => {
                         value={citizenPhone}
                         onChange={(e) => setCitizenPhone(e.target.value)}
                         placeholder="Your Phone Number (e.g. +91 98765 43210)"
-                        className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFFDFC] px-3.5 py-2 text-xs text-[#2B1F1D] focus:border-[#883A2E] focus:outline-none shadow-xs"
+                        className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3.5 py-2 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none"
                       />
                     </div>
                   </div>
@@ -805,13 +792,13 @@ export const EmergencyReportPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#883A2E] via-[#D65A31] to-[#883A2E] p-4 text-center font-black uppercase tracking-wider text-white shadow-xl shadow-[#883A2E]/25 hover:from-[#542A20] hover:to-[#883A2E] transition-all transform active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed group cursor-pointer"
+                className="w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 p-4 text-center font-black uppercase tracking-wider text-white shadow-2xl shadow-rose-600/50 hover:from-rose-500 hover:to-red-500 transition-all transform active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed group"
               >
                 <div className="flex items-center justify-center space-x-3 text-base sm:text-lg">
                   <Radio className={`h-6 w-6 ${isSubmitting ? 'animate-spin' : 'animate-pulse'}`} />
                   <span>{isSubmitting ? 'TRANSMITTING SOS TO POLICE...' : '🚨 SEND EMERGENCY ALERT'}</span>
                 </div>
-                <div className="text-[11px] font-medium text-white/90 mt-1">
+                <div className="text-[11px] font-medium text-rose-200/90 mt-1">
                   Instant broadcast to Police Command Center with Live Geolocation & Audio/Photo
                 </div>
               </button>

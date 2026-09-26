@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import { db } from '../db/schema';
-import { DatasetModel, CrimeRecordModel, isMongoConnected } from '../db/mongodb';
 import { AuthRequest } from '../middleware/auth';
 
 export function getDatasets(req: Request, res: Response) {
@@ -54,7 +53,7 @@ export function getDatasetById(req: Request, res: Response) {
   }
 }
 
-export async function deleteDataset(req: AuthRequest, res: Response) {
+export function deleteDataset(req: AuthRequest, res: Response) {
   try {
     const { id } = req.params;
 
@@ -67,20 +66,9 @@ export async function deleteDataset(req: AuthRequest, res: Response) {
       return res.status(400).json({ error: 'The primary default dataset cannot be deleted.' });
     }
 
-    // Delete records and dataset in SQLite
+    // Delete records and dataset
     db.prepare('DELETE FROM crime_records WHERE dataset_id = ?').run(id);
     db.prepare('DELETE FROM datasets WHERE id = ?').run(id);
-
-    // Delete from MongoDB Atlas if connected
-    if (isMongoConnected()) {
-      try {
-        await DatasetModel.deleteOne({ id });
-        await CrimeRecordModel.deleteMany({ dataset_id: id });
-        console.log(`[MongoDB Atlas] Deleted dataset ${id} and all associated crime records from Atlas.`);
-      } catch (mongoErr: any) {
-        console.error(`[MongoDB Atlas Sync Warning]: ${mongoErr.message}`);
-      }
-    }
 
     return res.json({ message: `Dataset "${dataset.name}" and all associated records were successfully removed.` });
   } catch (error) {

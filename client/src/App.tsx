@@ -1,19 +1,16 @@
 import React, { useState } from 'react';
-import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { Navbar } from './components/common/Navbar';
 import { Sidebar } from './components/common/Sidebar';
 import { Footer } from './components/common/Footer';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
-import { RoleRoute } from './components/auth/RoleRoute';
+import { AdminRoute } from './components/auth/AdminRoute';
 
 // Pages
-import { WelcomeLandingPage } from './pages/WelcomeLandingPage';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
-import { UserDashboardPage } from './pages/UserDashboardPage';
-import { PoliceDashboardPage } from './pages/PoliceDashboardPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AnalyticsModelsPage } from './pages/AnalyticsModelsPage';
 import { StateAnalyticsPage } from './pages/StateAnalyticsPage';
@@ -32,12 +29,10 @@ export const App: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const location = useLocation();
 
-  const isPublicPage =
-    ['/', '/welcome', '/overview', '/login', '/register', '/forgot-password', '/emergency', '/report-crime'].includes(location.pathname) ||
-    location.pathname.startsWith('/login');
+  const isPublicPage = ['/', '/login', '/register', '/forgot-password', '/emergency'].includes(location.pathname);
 
   return (
-    <div className="min-h-screen bg-[#FFF7F4] text-[#2B1F1D] flex flex-col font-sans">
+    <div className="min-h-screen bg-[#070b16] text-slate-100 flex flex-col font-sans">
       <Navbar
         onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
         isMobileSidebarOpen={isMobileSidebarOpen}
@@ -57,72 +52,17 @@ export const App: React.FC = () => {
           <div className={!isPublicPage ? 'p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto' : ''}>
             <Routes>
               {/* Public Routes */}
-              <Route path="/" element={<WelcomeLandingPage />} />
-              <Route path="/welcome" element={<WelcomeLandingPage />} />
-              <Route path="/overview" element={<LandingPage />} />
+              <Route path="/" element={<LandingPage />} />
               <Route path="/emergency" element={<EmergencyReportPage />} />
               <Route path="/report-crime" element={<EmergencyReportPage />} />
               <Route path="/login" element={<LoginPage />} />
-              <Route path="/login/user" element={<Navigate to="/login?role=user" replace />} />
-              <Route path="/login/police" element={<Navigate to="/login?role=police" replace />} />
-              <Route path="/login/admin" element={<Navigate to="/login?role=admin" replace />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
-              {/* -------------------------------------------------------- */}
-              {/* ROLE-SPECIFIC DASHBOARDS (RBAC) */}
-              {/* -------------------------------------------------------- */}
-              {/* 1. CITIZEN / USER DASHBOARD */}
-              <Route
-                path="/user/dashboard"
-                element={
-                  <RoleRoute allowedRoles={['user', 'admin']}>
-                    <UserDashboardPage />
-                  </RoleRoute>
-                }
-              />
-              <Route path="/user-dashboard" element={<Navigate to="/user/dashboard" replace />} />
+              {/* Police Emergency Command Hub (Accessible to analysts / officers) */}
+              <Route path="/police-emergency" element={<PoliceEmergencyPage />} />
 
-              {/* 2. POLICE / HIGHER OFFICER DASHBOARD */}
-              <Route
-                path="/police/dashboard"
-                element={
-                  <RoleRoute allowedRoles={['police', 'admin']}>
-                    <PoliceDashboardPage />
-                  </RoleRoute>
-                }
-              />
-              <Route path="/police-dashboard" element={<Navigate to="/police/dashboard" replace />} />
-              <Route
-                path="/police-emergency"
-                element={
-                  <RoleRoute allowedRoles={['police', 'admin']}>
-                    <PoliceEmergencyPage />
-                  </RoleRoute>
-                }
-              />
-
-              {/* 3. ADMINISTRATOR DASHBOARD */}
-              <Route
-                path="/admin/dashboard"
-                element={
-                  <RoleRoute allowedRoles={['admin']}>
-                    <AdminPage />
-                  </RoleRoute>
-                }
-              />
-              <Route
-                path="/admin"
-                element={
-                  <RoleRoute allowedRoles={['admin']}>
-                    <AdminPage />
-                  </RoleRoute>
-                }
-              />
-
-              {/* -------------------------------------------------------- */}
-              {/* GENERAL INTELLIGENCE & ANALYTICS PAGES */}
-              {/* -------------------------------------------------------- */}
+              {/* Protected Intelligence Pages */}
               <Route
                 path="/dashboard"
                 element={
@@ -166,9 +106,9 @@ export const App: React.FC = () => {
               <Route
                 path="/upload"
                 element={
-                  <RoleRoute allowedRoles={['user', 'police', 'admin']}>
+                  <ProtectedRoute>
                     <UploadPage />
-                  </RoleRoute>
+                  </ProtectedRoute>
                 }
               />
               <Route
@@ -201,6 +141,16 @@ export const App: React.FC = () => {
                   <ProtectedRoute>
                     <HelpPage />
                   </ProtectedRoute>
+                }
+              />
+
+              {/* Admin Protected Route */}
+              <Route
+                path="/admin"
+                element={
+                  <AdminRoute>
+                    <AdminPage />
+                  </AdminRoute>
                 }
               />
 

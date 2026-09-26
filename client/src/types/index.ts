@@ -2,37 +2,15 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'police' | 'user';
-  roles?: ('admin' | 'police' | 'user')[];
-  badge_number?: string | null;
-  station?: string | null;
-  department?: string | null;
-  phone?: string | null;
-  status?: 'active' | 'suspended';
+  role: 'admin' | 'user';
   created_at?: string;
 }
-
-export interface PoliceActionLog {
-  _id?: string;
-  report_code: string;
-  officer_id: string;
-  officer_name: string;
-  officer_badge?: string;
-  action_type: 'STATUS_UPDATE' | 'NOTE_ADDED' | 'PATROL_DISPATCHED' | 'MEDIA_DELETED' | 'INVESTIGATION_OPENED' | 'CASE_CLOSED';
-  previous_status?: string;
-  new_status?: string;
-  notes?: string;
-  unit_assigned?: string;
-  timestamp: string;
-}
-
 
 export interface Dataset {
   id: string;
   name: string;
   description: string;
   actual_record_count: number;
-  record_count?: number;
   min_year?: number;
   max_year?: number;
   state_count?: number;
@@ -202,12 +180,7 @@ export interface EmergencyReport {
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
   description: string;
   photo_url?: string | null;
-  photo_size?: number | null;
-  photo_mime_type?: string | null;
   audio_url?: string | null;
-  audio_duration?: number | null;
-  audio_size?: number | null;
-  audio_mime_type?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   location_address?: string;

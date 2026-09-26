@@ -49,27 +49,27 @@ export const RegionReportsPage: React.FC = () => {
       const doc = new jsPDF();
 
       // Header Banner
-      doc.setFillColor(84, 42, 32); // Dark Brown #542A20
+      doc.setFillColor(12, 18, 34);
       doc.rect(0, 0, 210, 40, 'F');
 
-      doc.setTextColor(214, 90, 49); // Accent Rust #D65A31
+      doc.setTextColor(6, 182, 212);
       doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
       doc.text('CRIME DATA ANALYTICS', 14, 18);
 
-      doc.setTextColor(255, 247, 244); // Warm off-white
+      doc.setTextColor(255, 255, 255);
       doc.setFontSize(11);
       doc.setFont('helvetica', 'normal');
       doc.text('Official Regional Intelligence Briefing Report', 14, 26);
 
       doc.setFontSize(9);
-      doc.setTextColor(196, 122, 90); // Light Brown
+      doc.setTextColor(148, 163, 184);
       doc.text(`Generated: ${new Date().toLocaleString()} | Security Level: Official Use`, 14, 34);
 
       // Region Filter Metadata Box
-      doc.setFillColor(255, 247, 244); // #FFF7F4
+      doc.setFillColor(241, 245, 249);
       doc.roundedRect(14, 46, 182, 20, 3, 3, 'F');
-      doc.setTextColor(43, 31, 29); // #2B1F1D
+      doc.setTextColor(15, 23, 42);
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.text(`Jurisdiction: ${report.region.state} > ${report.region.district} > ${report.region.city}`, 18, 54);
@@ -79,7 +79,7 @@ export const RegionReportsPage: React.FC = () => {
       // Section 1: Executive KPI Summary
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
-      doc.setTextColor(43, 31, 29);
+      doc.setTextColor(15, 23, 42);
       doc.text('1. Key Performance Indicators & Clearance Summary', 14, 76);
 
       const kpiTableData = [
@@ -96,7 +96,7 @@ export const RegionReportsPage: React.FC = () => {
         head: [['Metric', 'Value / Efficiency']],
         body: kpiTableData,
         theme: 'striped',
-        headStyles: { fillColor: [136, 58, 46] }, // Primary #883A2E
+        headStyles: { fillColor: [14, 165, 233] },
         styles: { fontSize: 9 }
       });
 
@@ -117,7 +117,7 @@ export const RegionReportsPage: React.FC = () => {
         head: [['Crime Classification', 'Recorded Incidents', 'Share of Total']],
         body: crimeTypeData,
         theme: 'grid',
-        headStyles: { fillColor: [84, 42, 32] }, // Dark Brown #542A20
+        headStyles: { fillColor: [59, 130, 246] },
         styles: { fontSize: 8.5 }
       });
 
@@ -140,7 +140,7 @@ export const RegionReportsPage: React.FC = () => {
           head: [['Police Station', 'Cases', 'Solved', 'Arrests']],
           body: stationData,
           theme: 'striped',
-          headStyles: { fillColor: [46, 125, 50] }, // Success #2E7D32
+          headStyles: { fillColor: [16, 185, 129] },
           styles: { fontSize: 8.5 }
         });
       }
@@ -157,15 +157,15 @@ export const RegionReportsPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#EEDFD9] pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-4">
         <div>
           <div className="flex items-center space-x-2">
-            <FileText className="h-6 w-6 text-[#883A2E]" />
-            <h1 className="text-2xl font-bold tracking-tight text-[#2B1F1D] sm:text-3xl">
+            <FileText className="h-6 w-6 text-cyan-400" />
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
               {t('regionReports', 'Regional Intelligence Briefing Reports')}
             </h1>
           </div>
-          <p className="mt-1 text-xs text-[#7A6360]">
+          <p className="mt-1 text-xs text-slate-400">
             Generate and export publication-ready official briefings with localized statistics, solve rates, and enforcement performance.
           </p>
         </div>
@@ -174,7 +174,7 @@ export const RegionReportsPage: React.FC = () => {
           <button
             onClick={generatePDF}
             disabled={isGeneratingPdf}
-            className="flex items-center space-x-2 rounded-xl bg-[#883A2E] hover:bg-[#542A20] px-5 py-2.5 text-xs font-bold text-white shadow-sm disabled:opacity-50 transition-colors cursor-pointer"
+            className="flex items-center space-x-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 transition-all cursor-pointer"
           >
             <Download className="h-4 w-4" />
             <span>{isGeneratingPdf ? 'Generating PDF...' : t('downloadReport', 'Download PDF Report')}</span>
@@ -187,22 +187,22 @@ export const RegionReportsPage: React.FC = () => {
 
       {/* Loading */}
       {isLoading && (
-        <div className="flex h-64 items-center justify-center rounded-2xl border border-[#EEDFD9] bg-[#FFFDFC] shadow-sm">
+        <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-800 bg-[#0c1326]/50">
           <div className="flex flex-col items-center space-y-3">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#883A2E] border-t-transparent" />
-            <p className="text-xs text-[#7A6360] font-mono">Compiling regional intelligence briefing...</p>
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+            <p className="text-xs text-slate-400 font-mono">Compiling regional intelligence briefing...</p>
           </div>
         </div>
       )}
 
       {/* Empty State */}
       {!isLoading && report && !report.hasData && (
-        <div className="flex min-h-[300px] flex-col items-center justify-center rounded-3xl border border-[#EEDFD9] bg-[#FFFDFC] p-8 text-center shadow-sm">
-          <AlertTriangle className="h-12 w-12 text-[#7A6360] mb-3" />
-          <h3 className="text-base font-bold text-[#2B1F1D]">
+        <div className="flex min-h-[300px] flex-col items-center justify-center rounded-3xl border border-slate-800 bg-[#0c1326]/50 p-8 text-center">
+          <AlertTriangle className="h-12 w-12 text-slate-500 mb-3" />
+          <h3 className="text-base font-bold text-slate-300">
             {t('noDataAvailable', 'No data available for this selection.')}
           </h3>
-          <p className="mt-1 text-xs text-[#7A6360] max-w-md">
+          <p className="mt-1 text-xs text-slate-500 max-w-md">
             No incident records exist for the specified State, District, City, or Year criteria.
           </p>
         </div>
@@ -212,25 +212,25 @@ export const RegionReportsPage: React.FC = () => {
       {!isLoading && report && report.hasData && (
         <div className="space-y-6">
           {/* Briefing Header Banner */}
-          <div className="rounded-3xl border border-[#EEDFD9] bg-[#FFFDFC] p-6 shadow-sm space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#EEDFD9] pb-4">
+          <div className="rounded-3xl border border-slate-800 bg-gradient-to-r from-slate-900 via-[#0c1326] to-slate-900 p-6 backdrop-blur-xl space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
               <div>
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[#883A2E] font-bold">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-cyan-400 font-bold">
                   Official Intelligence Dossier
                 </span>
-                <h2 className="text-xl font-bold text-[#2B1F1D] mt-1">
+                <h2 className="text-xl font-bold text-white mt-1">
                   Crime Analytics Briefing &bull; {report.region.state}
                 </h2>
-                <div className="flex items-center space-x-3 text-xs text-[#7A6360] mt-1">
-                  <span>District: <strong className="text-[#2B1F1D]">{report.region.district}</strong></span>
+                <div className="flex items-center space-x-3 text-xs text-slate-400 mt-1">
+                  <span>District: <strong className="text-slate-200">{report.region.district}</strong></span>
                   <span>&bull;</span>
-                  <span>City: <strong className="text-[#2B1F1D]">{report.region.city}</strong></span>
+                  <span>City: <strong className="text-slate-200">{report.region.city}</strong></span>
                   <span>&bull;</span>
-                  <span>Year: <strong className="text-[#2B1F1D]">{report.region.year}</strong></span>
+                  <span>Year: <strong className="text-slate-200">{report.region.year}</strong></span>
                 </div>
               </div>
 
-              <div className="text-right text-[11px] font-mono text-[#7A6360]">
+              <div className="text-right text-[11px] font-mono text-slate-400">
                 <div>Security: Law Enforcement Analytical Copy</div>
                 <div>Issued: {new Date(report.generatedAt).toLocaleDateString()}</div>
               </div>
@@ -238,24 +238,24 @@ export const RegionReportsPage: React.FC = () => {
 
             {/* Metrics Overview Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="rounded-2xl bg-[#FAF0EC] p-4 border border-[#EEDFD9]">
-                <div className="text-[11px] text-[#7A6360] font-mono">Total Recorded Cases</div>
-                <div className="text-2xl font-bold font-mono text-[#2B1F1D] mt-1">{report.summary.totalCrimes}</div>
+              <div className="rounded-2xl bg-slate-900/80 p-4 border border-slate-800">
+                <div className="text-[11px] text-slate-400 font-mono">Total Recorded Cases</div>
+                <div className="text-2xl font-bold font-mono text-white mt-1">{report.summary.totalCrimes}</div>
               </div>
-              <div className="rounded-2xl bg-[#FAF0EC] p-4 border border-[#EEDFD9]">
-                <div className="text-[11px] text-[#7A6360] font-mono">Resolution Rate</div>
-                <div className="text-2xl font-bold font-mono text-[#2E7D32] mt-1">{report.summary.solveRate}%</div>
-                <div className="text-[10px] text-[#7A6360] mt-0.5">{report.summary.solvedCases} Solved</div>
+              <div className="rounded-2xl bg-slate-900/80 p-4 border border-slate-800">
+                <div className="text-[11px] text-slate-400 font-mono">Resolution Rate</div>
+                <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">{report.summary.solveRate}%</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">{report.summary.solvedCases} Solved</div>
               </div>
-              <div className="rounded-2xl bg-[#FAF0EC] p-4 border border-[#EEDFD9]">
-                <div className="text-[11px] text-[#7A6360] font-mono">Arrests Executed</div>
-                <div className="text-2xl font-bold font-mono text-[#D65A31] mt-1">{report.summary.arrestRate}%</div>
-                <div className="text-[10px] text-[#7A6360] mt-0.5">{report.summary.arrestsMade} Suspects Detained</div>
+              <div className="rounded-2xl bg-slate-900/80 p-4 border border-slate-800">
+                <div className="text-[11px] text-slate-400 font-mono">Arrests Executed</div>
+                <div className="text-2xl font-bold font-mono text-amber-300 mt-1">{report.summary.arrestRate}%</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">{report.summary.arrestsMade} Suspects Detained</div>
               </div>
-              <div className="rounded-2xl bg-[#FAF0EC] p-4 border border-[#EEDFD9]">
-                <div className="text-[11px] text-[#7A6360] font-mono">Avg Investigation</div>
-                <div className="text-2xl font-bold font-mono text-[#542A20] mt-1">{report.summary.avgInvestigationDays || 0}d</div>
-                <div className="text-[10px] text-[#7A6360] mt-0.5">Days to resolution</div>
+              <div className="rounded-2xl bg-slate-900/80 p-4 border border-slate-800">
+                <div className="text-[11px] text-slate-400 font-mono">Avg Investigation</div>
+                <div className="text-2xl font-bold font-mono text-cyan-400 mt-1">{report.summary.avgInvestigationDays || 0}d</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Days to resolution</div>
               </div>
             </div>
           </div>
@@ -263,24 +263,24 @@ export const RegionReportsPage: React.FC = () => {
           {/* Crime Types & Case Statuses Tables */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Major Crime Types */}
-            <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFFDFC] p-6 shadow-sm">
-              <h3 className="text-sm font-bold text-[#2B1F1D] mb-4">Major Recorded Offense Types</h3>
+            <div className="rounded-2xl border border-slate-800 bg-[#0c1326]/75 p-6 backdrop-blur-xl">
+              <h3 className="text-sm font-bold text-white mb-4">Major Recorded Offense Types</h3>
               <div className="space-y-3">
                 {report.crimeTypes.map((ct, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-[#FAF0EC] border border-[#EEDFD9]">
-                    <span className="font-medium text-[#2B1F1D]">{ct.crime_type}</span>
-                    <span className="font-mono text-[#883A2E] font-bold">{ct.count} Cases ({ct.percentage}%)</span>
+                  <div key={idx} className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
+                    <span className="font-medium text-slate-200">{ct.crime_type}</span>
+                    <span className="font-mono text-cyan-400 font-bold">{ct.count} Cases ({ct.percentage}%)</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Police Station Workload */}
-            <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFFDFC] p-6 shadow-sm">
-              <h3 className="text-sm font-bold text-[#2B1F1D] mb-4">Police Station Clearance Breakdown</h3>
+            <div className="rounded-2xl border border-slate-800 bg-[#0c1326]/75 p-6 backdrop-blur-xl">
+              <h3 className="text-sm font-bold text-white mb-4">Police Station Clearance Breakdown</h3>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-[#2B1F1D]">
-                  <thead className="border-b border-[#EEDFD9] text-[10px] uppercase tracking-wider text-[#7A6360] font-mono">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500 font-mono">
                     <tr>
                       <th className="py-2">Station</th>
                       <th className="py-2 text-right">Cases</th>
@@ -288,13 +288,13 @@ export const RegionReportsPage: React.FC = () => {
                       <th className="py-2 text-right">Arrests</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#EEDFD9]">
+                  <tbody className="divide-y divide-slate-800/60">
                     {report.policeStations.map((ps, idx) => (
-                      <tr key={idx} className="hover:bg-[#FAF0EC]/60 transition-colors">
-                        <td className="py-2.5 font-medium text-[#2B1F1D]">{ps.police_station}</td>
-                        <td className="py-2.5 text-right font-mono text-[#2B1F1D]">{ps.count}</td>
-                        <td className="py-2.5 text-right font-mono text-[#2E7D32]">{ps.solved}</td>
-                        <td className="py-2.5 text-right font-mono text-[#D65A31]">{ps.arrests}</td>
+                      <tr key={idx} className="hover:bg-slate-800/30">
+                        <td className="py-2.5 font-medium text-slate-200">{ps.police_station}</td>
+                        <td className="py-2.5 text-right font-mono text-white">{ps.count}</td>
+                        <td className="py-2.5 text-right font-mono text-emerald-400">{ps.solved}</td>
+                        <td className="py-2.5 text-right font-mono text-amber-300">{ps.arrests}</td>
                       </tr>
                     ))}
                   </tbody>

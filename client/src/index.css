@@ -2,182 +2,63 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --primary: #883A2E;
-  --dark-brown: #542A20;
-  --accent-rust: #D65A31;
-  --light-brown: #C47A5A;
-  --background: #FFF7F4;
-  --surface: #FFFDFC;
-  --primary-text: #2B1F1D;
-  --secondary-text: #7A6360;
-  --success: #2E7D32;
-  --border-warm: #EEDFD9;
-  --border-subtle: #F4E9E4;
-}
-
 @layer base {
   body {
-    @apply font-sans antialiased text-[#2B1F1D] bg-[#FFF7F4];
+    @apply font-sans antialiased text-slate-100 bg-[#070b16];
     min-height: 100vh;
-    scrollbar-color: #C47A5A #FFF7F4;
-    scrollbar-width: thin;
-  }
-
-  h1, h2, h3, h4, h5, h6 {
-    color: #2B1F1D;
   }
 }
 
-/* Custom Scrollbar - Warm Reddish-Brown Palette */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 7px;
   height: 7px;
 }
 ::-webkit-scrollbar-track {
-  background: #FFF7F4;
+  background: #090e1c;
 }
 ::-webkit-scrollbar-thumb {
-  background: #C47A5A;
+  background: #1e293b;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #883A2E;
+  background: #334155;
 }
 
-/* Professional Warm Glassmorphism Styles */
+/* Glassmorphism Styles */
 .glass-panel {
-  background: rgba(255, 253, 252, 0.88);
+  background: rgba(13, 20, 38, 0.75);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid #EEDFD9;
-  box-shadow: 0 4px 20px -2px rgba(84, 42, 32, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .glass-panel-hover:hover {
-  border-color: rgba(214, 90, 49, 0.4);
-  box-shadow: 0 8px 30px rgba(136, 58, 46, 0.12);
+  border-color: rgba(14, 165, 233, 0.35);
+  box-shadow: 0 0 20px rgba(14, 165, 233, 0.1);
 }
 
 .glass-card {
-  background: #FFFDFC;
+  background: rgba(15, 23, 42, 0.65);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid #EEDFD9;
-  box-shadow: 0 2px 10px rgba(84, 42, 32, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .cyber-glow {
-  box-shadow: 0 0 15px rgba(214, 90, 49, 0.2);
+  box-shadow: 0 0 15px rgba(14, 165, 233, 0.18);
 }
 
-.glow-emerald, .glow-success {
-  box-shadow: 0 0 15px rgba(46, 125, 50, 0.2);
+.glow-emerald {
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
 }
 
-.glow-crimson, .glow-primary {
-  box-shadow: 0 0 15px rgba(136, 58, 46, 0.2);
+.glow-crimson {
+  box-shadow: 0 0 15px rgba(244, 63, 94, 0.2);
 }
 
-.glow-amber, .glow-rust {
-  box-shadow: 0 0 15px rgba(214, 90, 49, 0.2);
-}
-
-/* Cinematic Police & Crime Analytics Animations */
-@keyframes radarSweep {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes pulseRing {
-  0% {
-    transform: scale(0.6);
-    opacity: 0.9;
-  }
-  80% {
-    transform: scale(2.2);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(2.4);
-    opacity: 0;
-  }
-}
-
-@keyframes dataFlow {
-  0% {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-  30% {
-    opacity: 1;
-  }
-  70% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-}
-
-@keyframes beaconFlash {
-  0%, 100% {
-    opacity: 0.35;
-    transform: scale(0.95);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.15);
-    filter: drop-shadow(0 0 10px rgba(214, 90, 49, 0.7));
-  }
-}
-
-@keyframes floatSmooth {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-5px);
-  }
-}
-
-@keyframes scanlineMove {
-  0% {
-    top: -10%;
-  }
-  100% {
-    top: 110%;
-  }
-}
-
-.animate-radar-sweep {
-  animation: radarSweep 6s linear infinite;
-  transform-origin: center center;
-}
-
-.animate-pulse-ring {
-  animation: pulseRing 2.6s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
-}
-
-.animate-data-flow {
-  animation: dataFlow 2.2s ease-in-out infinite;
-}
-
-.animate-beacon-flash {
-  animation: beaconFlash 1.6s ease-in-out infinite;
-}
-
-.animate-float-smooth {
-  animation: floatSmooth 4s ease-in-out infinite;
-}
-
-.animate-scanline {
-  animation: scanlineMove 7s linear infinite;
+.glow-amber {
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 
 /* Print Styles for PDF and Reports */
