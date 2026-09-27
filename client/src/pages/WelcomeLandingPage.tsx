@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { ArrowRight, ShieldAlert, LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-export const LandingPage: React.FC = () => {
+export const WelcomeLandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -225,7 +225,7 @@ export const LandingPage: React.FC = () => {
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-center gap-4 w-full max-w-md">
           <button
             onClick={handleGetStarted}
-            id="overview-enter-portal-btn"
+            id="landing-enter-portal-btn"
             className="w-full sm:w-auto flex-1 inline-flex items-center justify-center space-x-3 px-8 py-4 rounded-2xl bg-gradient-to-r from-[#883A2E] via-[#D65A31] to-[#883A2E] bg-[length:200%_auto] text-white font-bold text-sm tracking-wider uppercase shadow-[0_0_25px_rgba(214,90,49,0.4)] hover:shadow-[0_0_35px_rgba(214,90,49,0.6)] hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 cursor-pointer border border-[#D65A31]/40"
           >
             <LogIn className="h-5 w-5" />

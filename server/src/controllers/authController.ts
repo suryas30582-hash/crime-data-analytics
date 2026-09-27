@@ -2,7 +2,9 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { db } from '../db/schema';
+import { syncUserToSupabase } from '../db/supabaseSync';
 import { generateToken, AuthRequest } from '../middleware/auth';
+
 import { User } from '../types';
 
 export function register(req: Request, res: Response) {
@@ -56,6 +58,16 @@ export function register(req: Request, res: Response) {
       INSERT INTO users (id, email, name, password_hash, role)
       VALUES (?, ?, ?, ?, ?)
     `).run(userId, cleanEmail, name.trim(), passwordHash, role);
+
+    // Sync to Supabase users table
+    syncUserToSupabase({
+      id: userId,
+      email: cleanEmail,
+      name: name.trim(),
+      password_hash: passwordHash,
+      role
+    });
+
 
     const newUser: User = {
       id: userId,

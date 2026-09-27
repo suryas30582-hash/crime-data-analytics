@@ -40,43 +40,43 @@ export const HelpPage: React.FC = () => {
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
-      <div className="border-b border-slate-800 pb-4">
+      <div className="border-b border-[#EEDFD9] pb-4">
         <div className="flex items-center space-x-2">
-          <HelpCircle className="h-6 w-6 text-cyan-400" />
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          <HelpCircle className="h-6 w-6 text-[#883A2E]" />
+          <h1 className="text-2xl font-bold tracking-tight text-[#2B1F1D] sm:text-3xl">
             {t('help', 'Documentation & Academic Reference')}
           </h1>
         </div>
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="mt-1 text-xs text-[#7A6360]">
           Complete guide to datasets, analytics algorithms, schema specifications, and platform features.
         </p>
       </div>
 
       {/* Dataset Schema Specification */}
-      <div className="rounded-2xl border border-slate-800 bg-[#0c1326]/75 p-6 backdrop-blur-xl space-y-4">
-        <div className="flex items-center space-x-2 border-b border-slate-800 pb-3">
-          <FileSpreadsheet className="h-5 w-5 text-cyan-400" />
-          <h2 className="text-sm font-bold text-white">Standard Dataset Schema (19 Fields)</h2>
+      <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFFDFC] p-6 shadow-sm space-y-4">
+        <div className="flex items-center space-x-2 border-b border-[#EEDFD9] pb-3">
+          <FileSpreadsheet className="h-5 w-5 text-[#883A2E]" />
+          <h2 className="text-sm font-bold text-[#2B1F1D]">Standard Dataset Schema (19 Fields)</h2>
         </div>
-        <p className="text-xs text-slate-300 leading-relaxed">
+        <p className="text-xs text-[#7A6360] leading-relaxed">
           The Crime Data Analytics platform operates on a standardized 19-column schema. When uploading custom datasets in XLSX or CSV format, ensure these column names match:
         </p>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="border-b border-slate-800 text-[10px] uppercase font-mono text-slate-400">
+          <table className="w-full text-left text-xs text-[#2B1F1D]">
+            <thead className="bg-[#FAF0EC] border-b border-[#EEDFD9] text-[10px] uppercase font-mono text-[#7A6360]">
               <tr>
                 <th className="py-2 px-2">Column Name</th>
                 <th className="py-2 px-2">Data Type</th>
                 <th className="py-2 px-2">Description</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
+            <tbody className="divide-y divide-[#EEDFD9] font-mono text-[11px]">
               {standardColumns.map((col, idx) => (
-                <tr key={idx} className="hover:bg-slate-800/30">
-                  <td className="py-2 px-2 font-bold text-cyan-400">{col.name}</td>
-                  <td className="py-2 px-2 text-slate-400">{col.type}</td>
-                  <td className="py-2 px-2 text-slate-300 font-sans">{col.desc}</td>
+                <tr key={idx} className="hover:bg-[#FAF0EC]/60 transition-colors">
+                  <td className="py-2 px-2 font-bold text-[#883A2E]">{col.name}</td>
+                  <td className="py-2 px-2 text-[#7A6360]">{col.type}</td>
+                  <td className="py-2 px-2 text-[#2B1F1D] font-sans">{col.desc}</td>
                 </tr>
               ))}
             </tbody>
@@ -85,29 +85,29 @@ export const HelpPage: React.FC = () => {
       </div>
 
       {/* Frequently Asked Questions */}
-      <div className="rounded-2xl border border-slate-800 bg-[#0c1326]/75 p-6 backdrop-blur-xl space-y-4">
-        <h2 className="text-sm font-bold text-white border-b border-slate-800 pb-3">
+      <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFFDFC] p-6 shadow-sm space-y-4">
+        <h2 className="text-sm font-bold text-[#2B1F1D] border-b border-[#EEDFD9] pb-3">
           Platform Architecture & Operations FAQ
         </h2>
 
         <div className="space-y-4 text-xs">
           <div className="space-y-1">
-            <h3 className="font-bold text-cyan-300">Q: Are the statistics hardcoded?</h3>
-            <p className="text-slate-400 leading-relaxed">
+            <h3 className="font-bold text-[#883A2E]">Q: Are the statistics hardcoded?</h3>
+            <p className="text-[#7A6360] leading-relaxed">
               No. Every KPI, bar chart, donut breakdown, year-wise trendline, and PDF report is computed dynamically in real-time from the active database records.
             </p>
           </div>
 
           <div className="space-y-1">
-            <h3 className="font-bold text-cyan-300">Q: How does multi-dataset switching work?</h3>
-            <p className="text-slate-400 leading-relaxed">
+            <h3 className="font-bold text-[#883A2E]">Q: How does multi-dataset switching work?</h3>
+            <p className="text-[#7A6360] leading-relaxed">
               The application supports isolated datasets (e.g. the 2,000-record India dataset and the 1,000-record Tamil Nadu dataset). Switching datasets in the top navbar instantly updates all pages to that dataset without mixing data.
             </p>
           </div>
 
           <div className="space-y-1">
-            <h3 className="font-bold text-cyan-300">Q: How do predictions work?</h3>
-            <p className="text-slate-400 leading-relaxed">
+            <h3 className="font-bold text-[#883A2E]">Q: How do predictions work?</h3>
+            <p className="text-[#7A6360] leading-relaxed">
               Predictions use mathematical linear regression over historical monthly timeline slices and spatial clustering. If a filtered location has fewer than 5 records, the engine displays an empty state: "Insufficient historical data for reliable prediction."
             </p>
           </div>

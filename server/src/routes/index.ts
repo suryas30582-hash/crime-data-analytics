@@ -58,6 +58,22 @@ router.get('/emergency/reports', optionalAuthenticate, emergencyController.getRe
 router.get('/emergency/reports/:code', optionalAuthenticate, emergencyController.getReportByCode);
 router.put('/emergency/reports/:code/status', optionalAuthenticate, emergencyController.updateReportStatus);
 router.post('/emergency/reports/:code/assign-patrol', optionalAuthenticate, emergencyController.assignPatrol);
+router.post('/emergency/reports/:code/backup-request', optionalAuthenticate, emergencyController.requestBackup);
+router.post(
+  '/emergency/reports/:code/officer-notes',
+  optionalAuthenticate,
+  upload.fields([{ name: 'scene_photos', maxCount: 5 }]),
+  emergencyController.submitOfficerNotes
+);
+router.get('/emergency/audit-trail', optionalAuthenticate, emergencyController.getAuditTrail);
+router.post('/emergency/check-escalations', optionalAuthenticate, emergencyController.triggerEscalationCheck);
 router.get('/emergency/stream', emergencyController.streamEmergencyEvents);
 
+// Nearest Police Station & Patrol Dispatch Routes
+router.get('/emergency/stations', optionalAuthenticate, emergencyController.getAllPoliceStations);
+router.get('/emergency/nearest-station', optionalAuthenticate, emergencyController.getNearestPoliceStation);
+router.post('/emergency/patrol-status', optionalAuthenticate, emergencyController.updatePatrolLifecycleStatus);
+router.post('/emergency/manual-dispatch', optionalAuthenticate, emergencyController.manualDispatchPatrol);
+
 export default router;
+

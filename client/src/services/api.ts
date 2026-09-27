@@ -7,7 +7,11 @@ import {
   CrimeRecord,
   PredictionData,
   RegionReportData,
-  ValidationReport
+  ValidationReport,
+  PoliceStation,
+  PatrolUnit,
+  EmergencyReport,
+  PatrolAssignment
 } from '../types';
 
 const rawApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
@@ -54,6 +58,11 @@ export const api = {
   }),
 
   login: (data: any) => request<{ message: string; token: string; user: User }>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+
+  googleLogin: (data: any) => request<{ message: string; token: string; user: User }>('/auth/google', {
     method: 'POST',
     body: JSON.stringify(data)
   }),
@@ -212,11 +221,142 @@ export const api = {
     });
   },
 
+  deleteEmergencyMedia: (code: string, mediaType: 'photo' | 'audio') => {
+    return request<{ success: boolean; message: string; report: any }>(`/emergency/reports/${encodeURIComponent(code)}/media/${mediaType}`, {
+      method: 'DELETE'
+    });
+  },
+
   getEmergencyStreamUrl: () => `${API_BASE}/emergency/stream`,
   getMediaUrl: (path: string | null | undefined) => {
     if (!path) return '';
     if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) return path;
     const base = API_BASE.replace(/\/api$/, '');
     return `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+  },
+
+  // -----------------------------------------------------------
+  // NEW RBAC INCIDENT WORKFLOWS (USER, POLICE, ADMIN)
+  // -----------------------------------------------------------
+  submitIncident: async (formData: FormData) => {
+    const token = localStorage.getItem('crime_auth_token');
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(`${API_BASE}/incidents/report`, {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorJson = await response.json().catch(() => ({ error: 'Incident submission failed' }));
+      throw new Error(errorJson.error || 'Incident could not be submitted');
+    }
+
+    return response.json() as Promise<{ success: boolean; message: string; report_code: string; incident: any }>;
+  },
+
+  getMyIncidents: () => {
+    return request<{ success: boolean; count: number; reports: any[] }>('/incidents/my-reports');
+  },
+
+  getPoliceIncidentFeed: (params?: { status?: string; severity?: string; district?: string; search?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.append('status', params.status);
+    if (params?.severity) q.append('severity', params.severity);
+    if (params?.district) q.append('district', params.district);
+    if (params?.search) q.append('search', params.search);
+    return request<{ success: boolean; count: number; incidents: any[] }>(`/incidents/police-feed?${q.toString()}`);
+  },
+
+  updateIncidentStatus: (code: string, data: { status: string; notes?: string }) => {
+    return request<{ success: boolean; message: string; report_code: string; new_status: string; timeline: any[] }>(
+      `/incidents/${encodeURIComponent(code)}/status`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      }
+    );
+  },
+
+  assignIncidentPatrol: (code: string, data: { unit_name: string; vehicle_type?: string; officer_in_charge?: string; contact_number?: string; eta_minutes?: number; dispatch_notes?: string }) => {
+    return request<{ success: boolean; message: string; patrol: any }>(
+      `/incidents/${encodeURIComponent(code)}/assign-patrol`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }
+    );
+  },
+
+  getPoliceActionLogs: () => {
+    return request<{ success: boolean; count: number; logs: any[] }>('/incidents/police-actions/logs');
+  },
+
+  // Admin APIs
+  getAdminUsers: (role?: string) => {
+    const q = role && role !== 'ALL' ? `?role=${role}` : '';
+    return request<{ success: boolean; counts: { total: number; users: number; police: number; admins: number }; users: User[] }>(`/admin/users${q}`);
+  },
+
+  createAdminUser: (userData: any) => {
+    return request<{ success: boolean; message: string; user: User }>('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(userData)
+    });
+  },
+
+  updateAdminUserRole: (id: string, data: { role?: string; status?: string; badge_number?: string; station?: string }) => {
+    return request<{ success: boolean; message: string; user: any }>(`/admin/users/${encodeURIComponent(id)}/role`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  },
+
+  deleteAdminUser: (id: string) => {
+    return request<{ success: boolean; message: string }>(`/admin/users/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+  },
+
+  getAdminSystemStats: () => {
+    return request<{ success: boolean; stats: any }>('/admin/system-stats');
+  },
+
+  // -----------------------------------------------------------
+  // NEAREST POLICE STATION & PATROL DISPATCH APIS
+  // -----------------------------------------------------------
+  getPoliceStations: () => {
+    return request<{ success: boolean; stations: PoliceStation[] }>('/emergency/stations');
+  },
+
+  getNearestPoliceStation: (lat: number, lng: number) => {
+    return request<{
+      success: boolean;
+      nearest_station: PoliceStation | null;
+      nearest_station_with_available_patrol: PoliceStation | null;
+      all_stations_ranked: PoliceStation[];
+    }>(`/emergency/nearest-station?lat=${lat}&lng=${lng}`);
+  },
+
+  updatePatrolStatus: (report_code: string, status: string, patrol_id?: string) => {
+    return request<{ success: boolean; message: string; report: EmergencyReport }>(
+      '/emergency/patrol-status',
+      {
+        method: 'POST',
+        body: JSON.stringify({ report_code, patrol_id, status })
+      }
+    );
+  },
+
+  manualDispatchPatrol: (report_code: string, station_id: string, patrol_id: string, dispatch_notes?: string) => {
+    return request<{ success: boolean; message: string; report: EmergencyReport; assignment: PatrolAssignment }>(
+      '/emergency/manual-dispatch',
+      {
+        method: 'POST',
+        body: JSON.stringify({ report_code, station_id, patrol_id, dispatch_notes })
+      }
+    );
   }
 };

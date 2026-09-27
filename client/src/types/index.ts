@@ -2,15 +2,37 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'police' | 'user';
+  roles?: ('admin' | 'police' | 'user')[];
+  badge_number?: string | null;
+  station?: string | null;
+  department?: string | null;
+  phone?: string | null;
+  status?: 'active' | 'suspended';
   created_at?: string;
 }
+
+export interface PoliceActionLog {
+  _id?: string;
+  report_code: string;
+  officer_id: string;
+  officer_name: string;
+  officer_badge?: string;
+  action_type: 'STATUS_UPDATE' | 'NOTE_ADDED' | 'PATROL_DISPATCHED' | 'MEDIA_DELETED' | 'INVESTIGATION_OPENED' | 'CASE_CLOSED';
+  previous_status?: string;
+  new_status?: string;
+  notes?: string;
+  unit_assigned?: string;
+  timestamp: string;
+}
+
 
 export interface Dataset {
   id: string;
   name: string;
   description: string;
   actual_record_count: number;
+  record_count?: number;
   min_year?: number;
   max_year?: number;
   state_count?: number;
@@ -160,6 +182,44 @@ export interface EmergencyTimelineEvent {
   note?: string;
 }
 
+export interface PatrolUnit {
+  id: string;
+  station_id: string;
+  unit_code: string;
+  vehicle_type: string;
+  officer_in_charge: string;
+  contact_number?: string | null;
+  status: 'AVAILABLE' | 'ASSIGNED' | 'EN_ROUTE' | 'ON_SCENE' | 'BUSY' | 'OFFLINE' | 'COMPLETED';
+  current_latitude?: number | null;
+  current_longitude?: number | null;
+  last_updated?: string;
+}
+
+export interface PoliceStation {
+  id: string;
+  station_code: string;
+  name: string;
+  state: string;
+  district: string;
+  city: string;
+  address?: string | null;
+  latitude: number;
+  longitude: number;
+  contact_number?: string | null;
+  status: 'ACTIVE' | 'INACTIVE';
+  patrols?: PatrolUnit[];
+  total_patrols?: number;
+  available_patrols?: number;
+  distance_km?: number;
+  estimated_eta_minutes?: number;
+}
+
+export interface NearestStationResult {
+  nearest_station: PoliceStation | null;
+  nearest_station_with_available_patrol: PoliceStation | null;
+  all_stations_ranked: PoliceStation[];
+}
+
 export interface PatrolAssignment {
   id?: number;
   report_code: string;
@@ -169,6 +229,12 @@ export interface PatrolAssignment {
   contact_number?: string;
   eta_minutes: number;
   dispatch_notes?: string;
+  station_id?: string;
+  station_name?: string;
+  patrol_id?: string;
+  distance_km?: number;
+  dispatch_type?: 'AUTOMATIC' | 'MANUAL';
+  status?: 'ASSIGNED' | 'EN_ROUTE' | 'ON_SCENE' | 'COMPLETED';
   assigned_at: string;
   resolved_at?: string;
 }
@@ -180,7 +246,12 @@ export interface EmergencyReport {
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
   description: string;
   photo_url?: string | null;
+  photo_size?: number | null;
+  photo_mime_type?: string | null;
   audio_url?: string | null;
+  audio_duration?: number | null;
+  audio_size?: number | null;
+  audio_mime_type?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   location_address?: string;
@@ -189,10 +260,17 @@ export interface EmergencyReport {
   city?: string;
   citizen_name?: string;
   citizen_phone?: string;
-  status: 'RECEIVED' | 'REVIEWING' | 'PATROL_ASSIGNED' | 'RESPONDING' | 'RESOLVED';
+  status: 'INCIDENT_REPORTED' | 'RECEIVED' | 'REVIEWING' | 'PATROL_ASSIGNED' | 'PATROL_EN_ROUTE' | 'ON_SCENE' | 'PATROL_UNAVAILABLE' | 'RESPONSE_DELAY' | 'RESPONDING' | 'RESOLVED' | 'ESCALATED';
   status_timeline?: EmergencyTimelineEvent[];
   patrol_assignment?: PatrolAssignment | null;
   patrol_assignments?: PatrolAssignment[];
+  nearest_station_id?: string | null;
+  nearest_station_name?: string | null;
+  distance_km?: number | null;
+  estimated_eta_minutes?: number | null;
+  dispatch_status?: 'AUTOMATICALLY_DISPATCHED' | 'PATROL_UNAVAILABLE' | 'MANUAL_DISPATCH_REQUIRED' | 'NO_GPS' | 'PENDING';
+  assigned_patrol_id?: string | null;
+  assigned_patrol_code?: string | null;
   created_at: string;
   updated_at: string;
 }

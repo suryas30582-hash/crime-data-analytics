@@ -13,11 +13,15 @@ import {
   ShieldAlert,
   LogOut,
   ChevronRight,
-  Database
+  Database,
+  Shield,
+  Lock,
+  User as UserIcon
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useDataset } from '../../context/DatasetContext';
+import { BrandLogo } from './BrandLogo';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -25,68 +29,201 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onCloseMobile }) => {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout } = useAuth();
   const { t } = useLanguage();
-  const { datasets, activeDatasetId, setActiveDatasetId, activeDataset } = useDataset();
+  const { datasets, activeDatasetId, setActiveDatasetId } = useDataset();
   const navigate = useNavigate();
 
-  const navItems = [
-    {
-      to: '/police-emergency',
-      label: 'Police Emergency Hub',
-      icon: ShieldAlert,
-      badge: 'SOS Live'
-    },
-    {
-      to: '/dashboard',
-      label: t('dashboard', 'Dashboard'),
-      icon: LayoutDashboard,
-      badge: 'Live'
-    },
-    {
-      to: '/analytics-models',
-      label: 'Analytics Models',
-      icon: TrendingUp,
-      badge: 'Advanced'
-    },
-    {
-      to: '/state-analytics',
-      label: t('stateCityAnalytics', 'State & City Analytics'),
-      icon: MapPin
-    },
-    {
-      to: '/district-explorer',
-      label: t('districtExplorer', 'District Explorer'),
-      icon: Compass
-    },
-    {
-      to: '/records',
-      label: t('crimeRecords', 'Crime Records'),
-      icon: FileSpreadsheet
-    },
-    {
-      to: '/upload',
-      label: t('uploadData', 'Upload Data'),
-      icon: UploadCloud
-    },
-    {
-      to: '/predictions',
-      label: t('predictions', 'Predictions'),
-      icon: TrendingUp
-    },
-    {
-      to: '/reports',
-      label: t('regionReports', 'Region Reports'),
-      icon: FileText
+  const getRoleNavItems = () => {
+    if (user?.role === 'admin') {
+      return [
+        {
+          to: '/admin/dashboard',
+          label: 'Admin Console',
+          icon: Lock,
+          badge: 'Admin'
+        },
+        {
+          to: '/police/dashboard',
+          label: 'Police Command Hub',
+          icon: Shield,
+          badge: 'Command'
+        },
+        {
+          to: '/police-emergency',
+          label: 'Incident Lifecycle & SOS',
+          icon: ShieldAlert,
+          badge: 'SOS Live'
+        },
+        {
+          to: '/user/dashboard',
+          label: 'Citizen Dashboard',
+          icon: LayoutDashboard
+        },
+        {
+          to: '/upload',
+          label: t('uploadData', 'Upload Crime Data'),
+          icon: UploadCloud,
+          badge: 'New'
+        },
+        {
+          to: '/dashboard',
+          label: t('dashboard', 'Crime Intelligence'),
+          icon: TrendingUp
+        },
+        {
+          to: '/analytics-models',
+          label: 'Analytics Models',
+          icon: TrendingUp,
+          badge: 'Advanced'
+        },
+        {
+          to: '/state-analytics',
+          label: t('stateCityAnalytics', 'State Analytics'),
+          icon: MapPin
+        },
+        {
+          to: '/district-explorer',
+          label: t('districtExplorer', 'District Explorer'),
+          icon: Compass
+        },
+        {
+          to: '/records',
+          label: t('crimeRecords', 'Crime Records'),
+          icon: FileSpreadsheet
+        },
+        {
+          to: '/predictions',
+          label: t('predictions', 'Predictions'),
+          icon: TrendingUp
+        },
+        {
+          to: '/reports',
+          label: t('regionReports', 'Region Reports'),
+          icon: FileText
+        }
+      ];
     }
-  ];
+
+    if (user?.role === 'police') {
+      return [
+        {
+          to: '/police/dashboard',
+          label: 'Police Command Hub',
+          icon: Shield,
+          badge: 'Command'
+        },
+        {
+          to: '/police-emergency',
+          label: 'Incident Lifecycle & Patrols',
+          icon: ShieldAlert,
+          badge: 'SOS Live'
+        },
+        {
+          to: '/dashboard',
+          label: t('dashboard', 'Crime Intelligence'),
+          icon: TrendingUp
+        },
+        {
+          to: '/analytics-models',
+          label: 'Analytics Models',
+          icon: TrendingUp,
+          badge: 'Advanced'
+        },
+        {
+          to: '/state-analytics',
+          label: t('stateCityAnalytics', 'State Analytics'),
+          icon: MapPin
+        },
+        {
+          to: '/district-explorer',
+          label: t('districtExplorer', 'District Explorer'),
+          icon: Compass
+        },
+        {
+          to: '/records',
+          label: t('crimeRecords', 'Crime Records'),
+          icon: FileSpreadsheet
+        },
+        {
+          to: '/upload',
+          label: t('uploadData', 'Upload Crime Data'),
+          icon: UploadCloud
+        },
+        {
+          to: '/predictions',
+          label: t('predictions', 'Predictions'),
+          icon: TrendingUp
+        },
+        {
+          to: '/reports',
+          label: t('regionReports', 'Region Reports'),
+          icon: FileText
+        }
+      ];
+    }
+
+    // Default: Citizen / User role
+    return [
+      {
+        to: '/user/dashboard',
+        label: 'Citizen Dashboard',
+        icon: UserIcon,
+        badge: 'Home'
+      },
+      {
+        to: '/emergency',
+        label: '🚨 Report Crime (SOS)',
+        icon: ShieldAlert,
+        badge: 'SOS'
+      },
+      {
+        to: '/upload',
+        label: t('uploadData', 'Upload Crime Data'),
+        icon: UploadCloud,
+        badge: 'New'
+      },
+      {
+        to: '/dashboard',
+        label: t('dashboard', 'Crime Intelligence'),
+        icon: TrendingUp
+      },
+      {
+        to: '/analytics-models',
+        label: 'Analytics Models',
+        icon: TrendingUp
+      },
+      {
+        to: '/state-analytics',
+        label: t('stateCityAnalytics', 'State Analytics'),
+        icon: MapPin
+      },
+      {
+        to: '/district-explorer',
+        label: t('districtExplorer', 'District Explorer'),
+        icon: Compass
+      },
+      {
+        to: '/records',
+        label: t('crimeRecords', 'Crime Records'),
+        icon: FileSpreadsheet
+      },
+      {
+        to: '/predictions',
+        label: t('predictions', 'Predictions'),
+        icon: TrendingUp
+      },
+      {
+        to: '/reports',
+        label: t('regionReports', 'Region Reports'),
+        icon: FileText
+      }
+    ];
+  };
+
+  const navItems = getRoleNavItems();
 
   const secondaryNavItems = [
-    {
-      to: '/emergency',
-      label: '🚨 Report Crime (SOS)',
-      icon: ShieldAlert
-    },
     {
       to: '/settings',
       label: t('settings', 'Settings'),
@@ -94,18 +231,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onCloseMobile }) => {
     },
     {
       to: '/help',
-      label: t('help', 'Help & Docs'),
+      label: t('help', 'Help & Schema'),
       icon: HelpCircle
     }
   ];
-
-  if (isAdmin) {
-    secondaryNavItems.unshift({
-      to: '/admin',
-      label: t('adminPanel', 'Admin Datasets'),
-      icon: ShieldAlert
-    });
-  }
 
   const handleLogout = () => {
     logout();
@@ -125,22 +254,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onCloseMobile }) => {
 
       {/* Sidebar Drawer */}
       <aside
-        className={`fixed top-16 bottom-0 left-0 z-40 flex w-64 flex-col border-r border-slate-800/80 bg-[#090e1f] transition-transform duration-200 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-16 bottom-0 left-0 z-40 flex w-64 flex-col border-r border-[#EEDFD9] bg-[#FFFDFC] shadow-warm-sm transition-transform duration-200 ease-in-out lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Navigation Group */}
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+          {/* Mobile Drawer Brand Header */}
+          <div className="lg:hidden pb-3 border-b border-[#EEDFD9]">
+            <BrandLogo size="sm" showTagline={true} showBadge={true} />
+          </div>
+
           {/* Mobile-Only Dataset Switcher */}
-          <div className="md:hidden border-b border-slate-800 pb-3">
-            <label className="px-1 mb-1.5 flex items-center space-x-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">
-              <Database className="h-3 w-3 text-cyan-400" />
+          <div className="md:hidden border-b border-[#EEDFD9] pb-3">
+            <label className="px-1 mb-1.5 flex items-center space-x-1.5 text-[10px] font-bold uppercase tracking-wider text-[#7A6360] font-mono">
+              <Database className="h-3 w-3 text-[#883A2E]" />
               <span>{t('datasetSelector', 'Active Dataset')}</span>
             </label>
             <select
               value={activeDatasetId}
               onChange={(e) => setActiveDatasetId(e.target.value)}
-              className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-2.5 py-2 text-xs text-cyan-300 font-medium focus:border-cyan-500 focus:outline-none"
+              className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] px-2.5 py-2 text-xs text-[#2B1F1D] font-medium focus:border-[#883A2E] focus:outline-none"
             >
               {datasets.map(d => (
                 <option key={d.id} value={d.id}>
@@ -151,7 +285,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onCloseMobile }) => {
           </div>
 
           <div>
-            <div className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 font-mono">
+            <div className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-[#7A6360] font-mono">
               Core Intelligence
             </div>
             <nav className="space-y-1">
@@ -165,17 +299,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onCloseMobile }) => {
                     className={({ isActive }) =>
                       `group flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-medium transition-all ${
                         isActive
-                          ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/10 text-cyan-400 border border-cyan-500/30 shadow-sm shadow-cyan-500/10'
-                          : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                          ? 'bg-[#883A2E]/10 text-[#883A2E] border border-[#883A2E]/25 font-semibold shadow-sm'
+                          : 'text-[#7A6360] hover:bg-[#FAF0EC] hover:text-[#2B1F1D]'
                       }`
                     }
                   >
                     <div className="flex items-center space-x-3">
-                      <Icon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110 text-slate-400 group-hover:text-cyan-400" />
+                      <Icon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110 text-[#7A6360] group-hover:text-[#883A2E]" />
                       <span>{item.label}</span>
                     </div>
                     {item.badge && (
-                      <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-400 border border-emerald-500/20">
+                      <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold border ${
+                        item.badge === 'SOS Live' || item.badge === 'SOS'
+                          ? 'bg-[#D65A31]/15 text-[#D65A31] border-[#D65A31]/25'
+                          : item.badge === 'Command' || item.badge === 'Admin'
+                          ? 'bg-[#542A20]/15 text-[#542A20] border-[#542A20]/25'
+                          : 'bg-[#883A2E]/10 text-[#883A2E] border-[#883A2E]/25'
+                      }`}>
                         {item.badge}
                       </span>
                     )}
@@ -186,7 +326,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onCloseMobile }) => {
           </div>
 
           <div>
-            <div className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 font-mono">
+            <div className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-[#7A6360] font-mono">
               System & Preferences
             </div>
             <nav className="space-y-1">
@@ -200,16 +340,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onCloseMobile }) => {
                     className={({ isActive }) =>
                       `group flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-medium transition-all ${
                         isActive
-                          ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/10 text-cyan-400 border border-cyan-500/30 shadow-sm shadow-cyan-500/10'
-                          : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                          ? 'bg-[#883A2E]/10 text-[#883A2E] border border-[#883A2E]/25 font-semibold shadow-sm'
+                          : 'text-[#7A6360] hover:bg-[#FAF0EC] hover:text-[#2B1F1D]'
                       }`
                     }
                   >
                     <div className="flex items-center space-x-3">
-                      <Icon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110 text-slate-400 group-hover:text-cyan-400" />
+                      <Icon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110 text-[#7A6360] group-hover:text-[#883A2E]" />
                       <span>{item.label}</span>
                     </div>
-                    <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-slate-500" />
+                    <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-[#7A6360]" />
                   </NavLink>
                 );
               })}
@@ -219,20 +359,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onCloseMobile }) => {
 
         {/* User Card & Logout Footer */}
         {user && (
-          <div className="border-t border-slate-800/80 p-3 bg-[#070b18]">
-            <div className="flex items-center justify-between rounded-lg bg-slate-900/60 p-2.5 border border-slate-800">
+          <div className="border-t border-[#EEDFD9] p-3 bg-[#FFF7F4]">
+            <div className="flex items-center justify-between rounded-lg bg-[#FFFDFC] p-2.5 border border-[#EEDFD9] shadow-sm">
               <div className="flex items-center space-x-2.5 truncate">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-600/20 text-cyan-400 font-bold text-xs border border-cyan-500/30 shrink-0">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#883A2E]/10 text-[#883A2E] font-bold text-xs border border-[#883A2E]/25 shrink-0">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="truncate">
-                  <div className="text-xs font-medium text-slate-200 truncate">{user.name}</div>
-                  <div className="text-[10px] text-cyan-400 font-mono capitalize">{user.role}</div>
+                  <div className="text-xs font-semibold text-[#2B1F1D] truncate">{user.name}</div>
+                  <div className="text-[10px] text-[#883A2E] font-medium truncate capitalize">
+                    {user.role === 'admin'
+                      ? '🛡️ Administrator'
+                      : user.role === 'police'
+                      ? `👮 ${user.badge_number || 'Police Officer'}`
+                      : '👤 Citizen User'}
+                  </div>
                 </div>
               </div>
               <button
                 onClick={handleLogout}
-                className="rounded-md p-1.5 text-slate-400 hover:bg-rose-950/40 hover:text-rose-400 transition-colors"
+                className="rounded-md p-1.5 text-[#7A6360] hover:bg-[#D65A31]/10 hover:text-[#D65A31] transition-colors"
                 title={t('logout', 'Logout')}
               >
                 <LogOut className="h-4 w-4" />
@@ -244,3 +390,4 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onCloseMobile }) => {
     </>
   );
 };
+

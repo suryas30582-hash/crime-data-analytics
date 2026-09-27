@@ -108,6 +108,42 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_emergency_severity ON emergency_reports(severity);
     CREATE INDEX IF NOT EXISTS idx_emergency_created ON emergency_reports(created_at);
 
+    CREATE TABLE IF NOT EXISTS police_stations (
+      id TEXT PRIMARY KEY,
+      station_code TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      state TEXT NOT NULL,
+      district TEXT NOT NULL,
+      city TEXT NOT NULL,
+      address TEXT,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      contact_number TEXT,
+      status TEXT NOT NULL DEFAULT 'ACTIVE',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ps_state ON police_stations(state);
+    CREATE INDEX IF NOT EXISTS idx_ps_district ON police_stations(district);
+    CREATE INDEX IF NOT EXISTS idx_ps_city ON police_stations(city);
+
+    CREATE TABLE IF NOT EXISTS patrol_units (
+      id TEXT PRIMARY KEY,
+      station_id TEXT NOT NULL,
+      unit_code TEXT UNIQUE NOT NULL,
+      vehicle_type TEXT NOT NULL,
+      officer_in_charge TEXT NOT NULL,
+      contact_number TEXT,
+      status TEXT NOT NULL DEFAULT 'AVAILABLE',
+      current_latitude REAL,
+      current_longitude REAL,
+      last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (station_id) REFERENCES police_stations(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_patrol_station ON patrol_units(station_id);
+    CREATE INDEX IF NOT EXISTS idx_patrol_status ON patrol_units(status);
+
     CREATE TABLE IF NOT EXISTS patrol_assignments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       report_code TEXT NOT NULL,
@@ -117,11 +153,104 @@ export function initDatabase() {
       contact_number TEXT,
       eta_minutes INTEGER NOT NULL DEFAULT 5,
       dispatch_notes TEXT,
+      station_id TEXT,
+      station_name TEXT,
+      patrol_id TEXT,
+      distance_km REAL,
+      dispatch_type TEXT DEFAULT 'AUTOMATIC',
+      status TEXT DEFAULT 'ASSIGNED',
       assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       resolved_at DATETIME,
       FOREIGN KEY (report_code) REFERENCES emergency_reports(report_code) ON DELETE CASCADE
     );
 
-    CREATE INDEX IF NOT EXISTS idx_patrol_report ON patrol_assignments(report_code);
+    CREATE TABLE IF NOT EXISTS backup_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_code TEXT NOT NULL,
+      requested_by TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      urgency TEXT CHECK(urgency IN ('CRITICAL', 'HIGH', 'MEDIUM')) NOT NULL DEFAULT 'HIGH',
+      status TEXT DEFAULT 'PENDING',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (report_code) REFERENCES emergency_reports(report_code) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_backup_report ON backup_requests(report_code);
+
+    CREATE TABLE IF NOT EXISTS incident_audit_trail (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_code TEXT NOT NULL,
+      user_id TEXT,
+      user_name TEXT NOT NULL,
+      action TEXT NOT NULL,
+      previous_status TEXT,
+      new_status TEXT,
+      details TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_audit_report ON incident_audit_trail(report_code);
   `);
+
+  // Non-destructive schema column migrations for emergency_reports & patrol_assignments
+  const emergencyColumns = [
+    'reported_at DATETIME',
+    'verified_at DATETIME',
+    'priority_assigned_at DATETIME',
+    'patrol_assigned_at DATETIME',
+    'en_route_at DATETIME',
+    'arrived_at DATETIME',
+    'evidence_collected_at DATETIME',
+    'officer_report_submitted_at DATETIME',
+    'investigation_at DATETIME',
+    'resolved_at DATETIME',
+    'escalated_at DATETIME',
+    'delay_flagged_at DATETIME',
+    'investigation_notes TEXT',
+    'evidence_details TEXT',
+    'action_taken TEXT',
+    'scene_photos TEXT',
+    'escalation_reason TEXT',
+    'nearest_station_id TEXT',
+    'nearest_station_name TEXT',
+    'distance_km REAL',
+    'estimated_eta_minutes INTEGER',
+    'dispatch_status TEXT DEFAULT \'PENDING\'',
+    'assigned_patrol_id TEXT',
+    'assigned_patrol_code TEXT'
+  ];
+
+  for (const colDef of emergencyColumns) {
+    try {
+      db.exec(`ALTER TABLE emergency_reports ADD COLUMN ${colDef}`);
+    } catch {
+      // Column already exists or table freshly created
+    }
+  }
+
+  const patrolAssignmentColumns = [
+    'station_id TEXT',
+    'station_name TEXT',
+    'patrol_id TEXT',
+    'distance_km REAL',
+    'dispatch_type TEXT DEFAULT \'AUTOMATIC\'',
+    'status TEXT DEFAULT \'ASSIGNED\''
+  ];
+
+  for (const colDef of patrolAssignmentColumns) {
+    try {
+      db.exec(`ALTER TABLE patrol_assignments ADD COLUMN ${colDef}`);
+    } catch {
+      // Column already exists or table freshly created
+    }
+  }
+
+  // Seed Police Stations and Patrol Units
+  try {
+    const { seedPoliceStationsAndPatrols } = require('./policeStationSeed');
+    seedPoliceStationsAndPatrols();
+  } catch (err) {
+    console.error('Error auto-seeding police stations:', err);
+  }
 }
+

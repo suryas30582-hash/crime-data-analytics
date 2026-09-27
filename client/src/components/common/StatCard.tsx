@@ -23,40 +23,40 @@ export const StatCard: React.FC<StatCardProps> = ({
 }) => {
   const variantStyles = {
     cyan: {
-      border: 'border-cyan-500/20 hover:border-cyan-500/40',
-      iconBg: 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20',
-      glow: 'group-hover:shadow-[0_0_20px_rgba(6,182,212,0.15)]',
-      valColor: 'text-white'
+      border: 'border-[#EEDFD9] hover:border-[#883A2E]/50',
+      iconBg: 'bg-[#883A2E]/10 text-[#883A2E] border border-[#883A2E]/20',
+      glow: 'group-hover:shadow-warm',
+      valColor: 'text-[#2B1F1D]'
     },
     emerald: {
-      border: 'border-emerald-500/20 hover:border-emerald-500/40',
-      iconBg: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
-      glow: 'group-hover:shadow-[0_0_20px_rgba(16,185,129,0.15)]',
-      valColor: 'text-emerald-400'
+      border: 'border-[#EEDFD9] hover:border-[#2E7D32]/50',
+      iconBg: 'bg-[#2E7D32]/10 text-[#2E7D32] border border-[#2E7D32]/20',
+      glow: 'group-hover:shadow-warm',
+      valColor: 'text-[#2E7D32]'
     },
     crimson: {
-      border: 'border-rose-500/20 hover:border-rose-500/40',
-      iconBg: 'bg-rose-500/10 text-rose-400 border border-rose-500/20',
-      glow: 'group-hover:shadow-[0_0_20px_rgba(244,63,94,0.15)]',
-      valColor: 'text-rose-400'
+      border: 'border-[#EEDFD9] hover:border-[#D65A31]/50',
+      iconBg: 'bg-[#D65A31]/10 text-[#D65A31] border border-[#D65A31]/20',
+      glow: 'group-hover:shadow-warm',
+      valColor: 'text-[#D65A31]'
     },
     amber: {
-      border: 'border-amber-500/20 hover:border-amber-500/40',
-      iconBg: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
-      glow: 'group-hover:shadow-[0_0_20px_rgba(245,158,11,0.15)]',
-      valColor: 'text-amber-300'
+      border: 'border-[#EEDFD9] hover:border-[#C47A5A]/50',
+      iconBg: 'bg-[#C47A5A]/10 text-[#C47A5A] border border-[#C47A5A]/20',
+      glow: 'group-hover:shadow-warm',
+      valColor: 'text-[#C47A5A]'
     },
     violet: {
-      border: 'border-violet-500/20 hover:border-violet-500/40',
-      iconBg: 'bg-violet-500/10 text-violet-400 border border-violet-500/20',
-      glow: 'group-hover:shadow-[0_0_20px_rgba(139,92,246,0.15)]',
-      valColor: 'text-violet-300'
+      border: 'border-[#EEDFD9] hover:border-[#542A20]/50',
+      iconBg: 'bg-[#542A20]/10 text-[#542A20] border border-[#542A20]/20',
+      glow: 'group-hover:shadow-warm',
+      valColor: 'text-[#542A20]'
     },
     blue: {
-      border: 'border-blue-500/20 hover:border-blue-500/40',
-      iconBg: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
-      glow: 'group-hover:shadow-[0_0_20px_rgba(59,130,246,0.15)]',
-      valColor: 'text-blue-300'
+      border: 'border-[#EEDFD9] hover:border-[#883A2E]/50',
+      iconBg: 'bg-[#883A2E]/10 text-[#883A2E] border border-[#883A2E]/20',
+      glow: 'group-hover:shadow-warm',
+      valColor: 'text-[#2B1F1D]'
     }
   };
 
@@ -64,11 +64,11 @@ export const StatCard: React.FC<StatCardProps> = ({
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-2xl bg-[#0c1326]/75 p-5 backdrop-blur-xl border transition-all duration-200 ${style.border} ${style.glow}`}
+      className={`group relative overflow-hidden rounded-2xl bg-[#FFFDFC] p-5 border shadow-warm-sm hover:shadow-warm transition-all duration-200 ${style.border} ${style.glow}`}
     >
       <div className="flex items-start justify-between">
         <div className="space-y-1">
-          <p className="text-xs font-medium text-slate-400 tracking-wide uppercase font-mono">
+          <p className="text-xs font-semibold text-[#7A6360] tracking-wide uppercase font-mono">
             {title}
           </p>
           <div className="flex items-baseline space-x-2">
@@ -78,14 +78,14 @@ export const StatCard: React.FC<StatCardProps> = ({
             {trend && (
               <span
                 className={`text-[11px] font-semibold ${
-                  trend.isPositive ? 'text-emerald-400' : 'text-rose-400'
+                  trend.isPositive ? 'text-[#2E7D32]' : 'text-[#D65A31]'
                 }`}
               >
                 {trend.value}
               </span>
             )}
           </div>
-          {subtext && <p className="text-xs text-slate-400 pt-0.5">{subtext}</p>}
+          {subtext && <p className="text-xs text-[#7A6360] pt-0.5">{subtext}</p>}
         </div>
 
         <div className={`rounded-xl p-3 ${style.iconBg} transition-transform group-hover:scale-105`}>
@@ -95,3 +95,4 @@ export const StatCard: React.FC<StatCardProps> = ({
     </div>
   );
 };
+

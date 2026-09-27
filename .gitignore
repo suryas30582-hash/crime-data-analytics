@@ -35,3 +35,7 @@ server/data/*.db-shm
 # Editor directories
 .vscode/
 .idea/
+
+# Scratch & temporary test scripts
+scratch/
+

@@ -2,7 +2,9 @@ import { Request, Response } from 'express';
 import * as xlsx from 'xlsx';
 import Papa from 'papaparse';
 import { db } from '../db/schema';
+import { syncDatasetToSupabase, syncCrimeRecordsToSupabase } from '../db/supabaseSync';
 import { AuthRequest } from '../middleware/auth';
+
 import { CrimeRecord } from '../types';
 import { getDistrictForCity } from '../db/seed';
 
@@ -318,9 +320,17 @@ export function commitImport(req: AuthRequest, res: Response) {
     const totalInDataset = (db.prepare('SELECT COUNT(*) as count FROM crime_records WHERE dataset_id = ?').get(activeDatasetId) as { count: number }).count;
     db.prepare('UPDATE datasets SET record_count = ? WHERE id = ?').run(totalInDataset, activeDatasetId);
 
+    // Sync to Supabase
+    const datasetObj = db.prepare('SELECT * FROM datasets WHERE id = ?').get(activeDatasetId);
+    if (datasetObj) {
+      syncDatasetToSupabase(datasetObj);
+      syncCrimeRecordsToSupabase(activeDatasetId as string, records);
+    }
+
     // Log audit
     db.prepare('INSERT INTO audit_logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(req.user?.id || 'anonymous', 'IMPORT_DATASET', `Imported ${records.length} records into dataset ${activeDatasetId}`);
+
 
     return res.json({
       success: true,
