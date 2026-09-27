@@ -292,12 +292,9 @@ export const LoginPage: React.FC = () => {
         {/* STEP 2: OTP Verification Code Input */}
         {step === 'otp' && (
           <form onSubmit={handleVerifyOTP} className="space-y-4 animate-in fade-in">
-            <div className="rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] p-3 text-center space-y-1">
+            <div className="rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] p-3 text-center">
               <p className="text-xs font-semibold text-[#2B1F1D]">
                 Enter the verification code sent to your email
-              </p>
-              <p className="text-[11px] font-mono text-[#883A2E] truncate">
-                {email}
               </p>
             </div>
 

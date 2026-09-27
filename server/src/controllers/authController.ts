@@ -357,42 +357,56 @@ export async function sendOTP(req: Request, res: Response) {
       VALUES (?, ?, ?, ?, 0, ?)
     `).run(crypto.randomUUID(), cleanEmail, codeHash, expiresAt, resendAfter);
 
-    // Dispatch OTP via Nodemailer email service
-    try {
-      let transporter;
-      if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-        transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: Number(process.env.SMTP_PORT) || 587,
-          secure: process.env.SMTP_SECURE === 'true',
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
-          }
-        });
-      } else {
-        transporter = nodemailer.createTransport({
-          jsonTransport: true
-        });
-      }
+    // Ensure SMTP service is configured before attempting email dispatch
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      console.warn('SMTP configuration missing: SMTP_HOST, SMTP_USER, or SMTP_PASS environment variables are not set.');
+      return res.status(503).json({
+        error: 'Email delivery service is currently not configured on the server. Please configure SMTP environment variables.'
+      });
+    }
 
+    const fromAddress = process.env.SMTP_FROM || `"${process.env.SMTP_FROM_NAME || 'Crime Analytics Portal'}" <${process.env.SMTP_USER}>`;
+
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+
+    try {
       await transporter.sendMail({
-        from: '"Crime Analytics Portal" <no-reply@crimeanalytics.gov.in>',
+        from: fromAddress,
         to: cleanEmail,
-        subject: 'Verification Code - Crime Data Analytics Portal',
+        subject: 'Your Verification Code - Crime Data Analytics Portal',
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #eedfd9; border-radius: 12px;">
-            <h2 style="color: #883a2e;">Crime Data Analytics Portal</h2>
-            <p>Your 6-digit verification code is:</p>
-            <div style="font-size: 32px; font-weight: bold; color: #2b1f1d; letter-spacing: 4px; padding: 12px; background: #fff7f4; text-align: center; border-radius: 8px;">
+          <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #eedfd9; border-radius: 16px; background-color: #fffdfc;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h2 style="color: #883a2e; margin: 0; font-size: 20px;">Crime Data Analytics Portal</h2>
+              <p style="color: #7a6360; font-size: 13px; margin-top: 4px;">Security Verification Code</p>
+            </div>
+            <div style="font-size: 34px; font-weight: bold; color: #2b1f1d; letter-spacing: 6px; padding: 16px; background-color: #fff7f4; text-align: center; border-radius: 12px; border: 1px border-[#eedfd9]; font-family: monospace;">
               ${rawCode}
             </div>
-            <p style="color: #7a6360; font-size: 12px; margin-top: 20px;">This code will expire in 10 minutes. Do not share this code with anyone.</p>
+            <p style="color: #542a20; font-size: 12px; margin-top: 24px; text-align: center;">
+              This code will expire in <strong>10 minutes</strong>. If you did not request this verification code, please ignore this email.
+            </p>
           </div>
         `
       });
-    } catch (mailErr) {
-      console.warn('Nodemailer dispatch notice:', mailErr);
+    } catch (mailErr: any) {
+      console.error('Nodemailer sendMail failed:', mailErr?.message || mailErr);
+      // Clean up unsent OTP entry on mail dispatch failure
+      db.prepare('DELETE FROM otp_codes WHERE email = ?').run(cleanEmail);
+      return res.status(500).json({
+        error: 'Failed to deliver verification code to your email inbox. Please check the email address or try again.'
+      });
     }
 
     return res.json({ message: 'Verification code sent to your email.' });
