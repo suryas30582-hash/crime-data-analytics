@@ -50,9 +50,16 @@ export function register(req: Request, res: Response) {
     const passwordHash = bcrypt.hashSync(password, salt);
     const userId = crypto.randomUUID();
 
-    // Check if this is the very first user created; if so, assign admin, else user
-    const totalUsers = (db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number }).count;
-    const role = totalUsers === 0 ? 'admin' : 'user';
+    // Determine role based on email or request body
+    let role = (req.body.role || '').toLowerCase();
+    if (!['admin', 'police', 'user'].includes(role)) {
+      if (cleanEmail === 'rramiya697@gmail.com') role = 'police';
+      else if (cleanEmail === 'suryas30582@gmail.com') role = 'admin';
+      else {
+        const totalUsers = (db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number }).count;
+        role = totalUsers === 0 ? 'admin' : 'user';
+      }
+    }
 
     db.prepare(`
       INSERT INTO users (id, email, name, password_hash, role)
@@ -68,13 +75,12 @@ export function register(req: Request, res: Response) {
       role
     });
 
-
     const newUser: User = {
       id: userId,
       email: cleanEmail,
       name: name.trim(),
       password_hash: '',
-      role: role as 'admin' | 'user',
+      role: role as 'admin' | 'police' | 'user',
       created_at: new Date().toISOString()
     };
 
@@ -109,12 +115,42 @@ export function login(req: Request, res: Response) {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail) as User | undefined;
+    let user = (db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail) as unknown) as User | undefined;
 
+    // Auto-provision demo accounts if logging in with official demo credentials for first time
     if (!user) {
-      return res.status(401).json({
-        error: `No registered account found with email "${cleanEmail}". Please click "Register" to create your account first.`
-      });
+      if (cleanEmail === 'rramiya697@gmail.com') {
+        const salt = bcrypt.genSaltSync(10);
+        const passwordHash = bcrypt.hashSync('PoliceSecret2026!', salt);
+        const userId = crypto.randomUUID();
+        db.prepare(`
+          INSERT INTO users (id, email, name, password_hash, role)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(userId, cleanEmail, 'Inspector Ramiya (Peelamedu PS)', passwordHash, 'police');
+        user = (db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail) as unknown) as User;
+      } else if (cleanEmail === 'suryas30582@gmail.com') {
+        const salt = bcrypt.genSaltSync(10);
+        const passwordHash = bcrypt.hashSync('AdminSecret2026!', salt);
+        const userId = crypto.randomUUID();
+        db.prepare(`
+          INSERT INTO users (id, email, name, password_hash, role)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(userId, cleanEmail, 'Suriya (Admin)', passwordHash, 'admin');
+        user = (db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail) as unknown) as User;
+      } else if (cleanEmail === 'citizen.sharma@example.com') {
+        const salt = bcrypt.genSaltSync(10);
+        const passwordHash = bcrypt.hashSync('password123', salt);
+        const userId = crypto.randomUUID();
+        db.prepare(`
+          INSERT INTO users (id, email, name, password_hash, role)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(userId, cleanEmail, 'Citizen Sharma', passwordHash, 'user');
+        user = (db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail) as unknown) as User;
+      } else {
+        return res.status(401).json({
+          error: `No registered account found with email "${cleanEmail}". Please click "Register" to create your account first.`
+        });
+      }
     }
 
     const isMatch = bcrypt.compareSync(password, user.password_hash);

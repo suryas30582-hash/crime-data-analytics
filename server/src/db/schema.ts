@@ -21,9 +21,35 @@ export function initDatabase() {
       email TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
       password_hash TEXT NOT NULL,
-      role TEXT CHECK(role IN ('admin', 'user')) NOT NULL DEFAULT 'user',
+      role TEXT NOT NULL DEFAULT 'user',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+
+  // Migrate old users table schema to allow 'police' role if old check constraint exists
+  try {
+    const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get() as { sql?: string } | undefined;
+    if (tableInfo?.sql && tableInfo.sql.includes('CHECK')) {
+      db.exec(`
+        CREATE TABLE users_new (
+          id TEXT PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          password_hash TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'user',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT OR IGNORE INTO users_new (id, email, name, password_hash, role, created_at)
+        SELECT id, email, name, password_hash, role, created_at FROM users;
+        DROP TABLE users;
+        ALTER TABLE users_new RENAME TO users;
+      `);
+    }
+  } catch (mErr) {
+    console.warn('Schema migration notice:', mErr);
+  }
+
+  db.exec(`
 
     CREATE TABLE IF NOT EXISTS datasets (
       id TEXT PRIMARY KEY,

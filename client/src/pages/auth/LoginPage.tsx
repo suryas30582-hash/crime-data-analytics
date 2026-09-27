@@ -94,6 +94,7 @@ export const LoginPage: React.FC = () => {
     setIsSubmitting(true);
 
     // Try Clerk Authentication first if configured
+    let clerkAuthenticated = false;
     if (isSignInLoaded && signIn) {
       try {
         const result = await signIn.create({
@@ -103,21 +104,27 @@ export const LoginPage: React.FC = () => {
 
         if (result.status === 'complete' && result.createdSessionId) {
           await setActive({ session: result.createdSessionId });
-          const user = await login({ email: email.trim(), password, expectedRole: activeRole });
-          handleRedirect(user);
-          return;
+          clerkAuthenticated = true;
         }
       } catch (clerkErr: any) {
-        console.warn('Clerk sign-in notice:', clerkErr?.errors?.[0]?.message || clerkErr?.message);
+        const errMsg = clerkErr?.errors?.[0]?.message || clerkErr?.message;
+        console.warn('Clerk sign-in notice:', errMsg);
+        if (errMsg && (errMsg.toLowerCase().includes('password') || errMsg.toLowerCase().includes('identifier'))) {
+          setError(errMsg);
+          setIsSubmitting(false);
+          return;
+        }
       }
     }
 
-    // Standard authentication endpoint
+    // Authenticate with application backend API to establish session & role
     try {
       const user = await login({ email: email.trim(), password, expectedRole: activeRole });
       handleRedirect(user);
     } catch (err: any) {
-      setError(err.message || 'Invalid email or password. Please verify your credentials.');
+      if (!clerkAuthenticated) {
+        setError(err.message || 'Invalid email or password. Please verify your credentials.');
+      }
     } finally {
       setIsSubmitting(false);
     }

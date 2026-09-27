@@ -8,7 +8,7 @@ export interface AuthRequest extends Request {
     id: string;
     email: string;
     name: string;
-    role: 'admin' | 'user';
+    role: 'admin' | 'police' | 'user';
   };
 }
 
@@ -24,7 +24,7 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
       id: string;
       email: string;
       name: string;
-      role: 'admin' | 'user';
+      role: 'admin' | 'police' | 'user';
     };
     req.user = decoded;
     next();
@@ -42,7 +42,7 @@ export function optionalAuthenticate(req: AuthRequest, res: Response, next: Next
         id: string;
         email: string;
         name: string;
-        role: 'admin' | 'user';
+        role: 'admin' | 'police' | 'user';
       };
       req.user = decoded;
     } catch {
@@ -59,7 +59,7 @@ export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction
   next();
 }
 
-export function generateToken(user: { id: string; email: string; name: string; role: 'admin' | 'user' }) {
+export function generateToken(user: { id: string; email: string; name: string; role: 'admin' | 'police' | 'user' }) {
   return jwt.sign(
     {
       id: user.id,
