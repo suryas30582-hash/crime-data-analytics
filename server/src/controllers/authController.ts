@@ -104,7 +104,7 @@ export function register(req: Request, res: Response) {
 
 export function login(req: Request, res: Response) {
   try {
-    const { email, password } = req.body;
+    const { email, password, expectedRole } = req.body;
 
     if (!email || !email.trim()) {
       return res.status(400).json({ error: 'Email address is required.' });
@@ -115,6 +115,16 @@ export function login(req: Request, res: Response) {
     }
 
     const cleanEmail = email.trim().toLowerCase();
+
+    // Enforce Email-to-Role authorization for Admin and Police
+    if (expectedRole === 'admin' && cleanEmail !== 'suryas30582@gmail.com') {
+      return res.status(403).json({ error: `Access denied. "${cleanEmail}" is not authorized for Administrator access.` });
+    }
+
+    if (expectedRole === 'police' && cleanEmail !== 'rramiya697@gmail.com') {
+      return res.status(403).json({ error: `Access denied. "${cleanEmail}" is not authorized for Police access.` });
+    }
+
     let user = (db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail) as unknown) as User | undefined;
 
     // Auto-provision demo accounts if logging in with official demo credentials for first time
@@ -151,6 +161,15 @@ export function login(req: Request, res: Response) {
           error: `No registered account found with email "${cleanEmail}". Please click "Register" to create your account first.`
         });
       }
+    }
+
+    // Ensure authorized emails maintain correct role mapping
+    if (cleanEmail === 'suryas30582@gmail.com' && user.role !== 'admin') {
+      db.prepare('UPDATE users SET role = ? WHERE id = ?').run('admin', user.id);
+      user.role = 'admin';
+    } else if (cleanEmail === 'rramiya697@gmail.com' && user.role !== 'police') {
+      db.prepare('UPDATE users SET role = ? WHERE id = ?').run('police', user.id);
+      user.role = 'police';
     }
 
     const isMatch = bcrypt.compareSync(password, user.password_hash);

@@ -123,12 +123,7 @@ export const LoginPage: React.FC = () => {
         }
       } catch (clerkErr: any) {
         const errMsg = clerkErr?.errors?.[0]?.message || clerkErr?.message;
-        console.warn('Clerk sign-in notice:', errMsg);
-        if (errMsg && (errMsg.toLowerCase().includes('password') || errMsg.toLowerCase().includes('identifier'))) {
-          setError(errMsg);
-          setIsSubmitting(false);
-          return;
-        }
+        console.warn('Clerk sign-in notice (falling back to backend auth):', errMsg);
       }
     }
 
