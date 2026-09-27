@@ -8,7 +8,7 @@ import { DatasetProvider } from './context/DatasetContext';
 import { App } from './App';
 import './index.css';
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || "pk_test_bW9kZXJuLWNvbHQtNzIuY2xlcmsuYWNjb3VudHMuZGV2JA";
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_d2Vsa29tZS1zbmFpbC0zOC5jbGVyay5hY2NvdW50cy5kZXYk';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
