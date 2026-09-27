@@ -16,6 +16,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   hasRole: (role: RoleType) => boolean;
   login: (credentials: { email: string; password: string; expectedRole?: string }) => Promise<User>;
+  citizenLogin: (data: { email: string }) => Promise<User>;
   googleLogin: (data: { email: string; name?: string; credentialToken?: string; expectedRole?: string }) => Promise<User>;
   register: (data: {
     name: string;
@@ -102,6 +103,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res.user;
   };
 
+  const citizenLogin = async (data: { email: string }): Promise<User> => {
+    const res = await api.citizenLogin(data);
+    localStorage.setItem('crime_auth_token', res.token);
+    setToken(res.token);
+    setUser(res.user);
+    return res.user;
+  };
+
   const googleLogin = async (data: { email: string; name?: string; credentialToken?: string; expectedRole?: string }): Promise<User> => {
     const res = await api.googleLogin(data);
     localStorage.setItem('crime_auth_token', res.token);
@@ -167,6 +176,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!user,
         hasRole,
         login,
+        citizenLogin,
         googleLogin,
         register,
         forgotPassword,

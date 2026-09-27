@@ -59,6 +59,13 @@ export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction
   next();
 }
 
+export function requirePolice(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user || (req.user.role !== 'police' && req.user.role !== 'admin')) {
+    return res.status(403).json({ error: 'Access denied. Authorized Police privileges required.' });
+  }
+  next();
+}
+
 export function generateToken(user: { id: string; email: string; name: string; role: 'admin' | 'police' | 'user' }) {
   return jwt.sign(
     {

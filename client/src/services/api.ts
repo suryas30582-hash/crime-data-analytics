@@ -62,6 +62,11 @@ export const api = {
     body: JSON.stringify(data)
   }),
 
+  citizenLogin: (data: { email: string }) => request<{ message: string; token: string; user: User }>('/auth/citizen-login', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+
   googleLogin: (data: any) => request<{ message: string; token: string; user: User }>('/auth/google', {
     method: 'POST',
     body: JSON.stringify(data)

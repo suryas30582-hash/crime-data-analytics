@@ -23,7 +23,7 @@ export const LoginPage: React.FC = () => {
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
 
   const { isLoaded: isSignInLoaded, signIn, setActive } = useSignIn();
-  const { login, googleLogin } = useAuth();
+  const { login, citizenLogin, googleLogin } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
 
@@ -42,7 +42,7 @@ export const LoginPage: React.FC = () => {
     setError(null);
     if (role === 'user') {
       setEmail('citizen.sharma@example.com');
-      setPassword('password123');
+      setPassword('');
     } else if (role === 'police') {
       setEmail('rramiya697@gmail.com');
       setPassword('PoliceSecret2026!');
@@ -86,12 +86,27 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
-    if (!password) {
-      setError('Please enter your password.');
+    setIsSubmitting(true);
+
+    // PUBLIC CITIZEN ACCESS FLOW (NO PASSWORD / NO CLERK REQUIRED)
+    if (activeRole === 'user') {
+      try {
+        const user = await citizenLogin({ email: email.trim() });
+        handleRedirect(user);
+      } catch (err: any) {
+        setError(err.message || 'Unable to access Citizen Portal.');
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
 
-    setIsSubmitting(true);
+    // PRIVATE POLICE / ADMIN AUTHENTICATION FLOW
+    if (!password) {
+      setError('Please enter your password.');
+      setIsSubmitting(false);
+      return;
+    }
 
     // Try Clerk Authentication first if configured
     let clerkAuthenticated = false;
@@ -309,12 +324,15 @@ export const LoginPage: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-[#2B1F1D]">Email Address</label>
+            <label htmlFor="login-email" className="text-xs font-semibold text-[#2B1F1D]">Email Address</label>
             <div className="relative">
               <Mail className="absolute left-3.5 top-3 h-4 w-4 text-[#7A6360]" />
               <input
+                id="login-email"
+                name="email"
                 type="email"
                 required
+                autoComplete="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder={activeRole === 'police' ? 'rramiya697@gmail.com' : activeRole === 'admin' ? 'suryas30582@gmail.com' : 'name@example.com'}
@@ -323,40 +341,49 @@ export const LoginPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-[#2B1F1D]">Password</label>
-              <Link to="/forgot-password" className="text-[11px] font-medium text-[#883A2E] hover:underline">
-                {t('forgotPassword', 'Forgot Password?')}
-              </Link>
+          {activeRole !== 'user' && (
+            <div className="space-y-1.5 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <label htmlFor="login-password" className="text-xs font-semibold text-[#2B1F1D]">Password</label>
+                <Link to="/forgot-password" className="text-[11px] font-medium text-[#883A2E] hover:underline">
+                  {t('forgotPassword', 'Forgot Password?')}
+                </Link>
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-3 h-4 w-4 text-[#7A6360]" />
+                <input
+                  id="login-password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] pl-10 pr-10 py-2.5 text-xs text-[#2B1F1D] placeholder-[#7A6360]/60 focus:border-[#883A2E] focus:bg-[#FFFDFC] focus:outline-none focus:ring-1 focus:ring-[#883A2E]/30"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2.5 text-[#7A6360] hover:text-[#2B1F1D]"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
-            <div className="relative">
-              <Lock className="absolute left-3.5 top-3 h-4 w-4 text-[#7A6360]" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                required
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] pl-10 pr-10 py-2.5 text-xs text-[#2B1F1D] placeholder-[#7A6360]/60 focus:border-[#883A2E] focus:bg-[#FFFDFC] focus:outline-none focus:ring-1 focus:ring-[#883A2E]/30"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-2.5 text-[#7A6360] hover:text-[#2B1F1D]"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
+          )}
 
           <button
             type="submit"
             disabled={isSubmitting || isGoogleSubmitting}
             className={`flex w-full items-center justify-center space-x-2 rounded-xl py-2.5 text-xs font-semibold text-white shadow-md disabled:opacity-50 transition-all cursor-pointer bg-gradient-to-r ${portal.gradient} hover:brightness-110`}
           >
-            <span>{isSubmitting ? 'Authenticating Role...' : `Sign In to ${portal.title}`}</span>
+            <span>
+              {isSubmitting
+                ? activeRole === 'user' ? 'Accessing Citizen Portal...' : 'Authenticating Role...'
+                : activeRole === 'user' ? 'Access Citizen Portal' : `Sign In to ${portal.title}`}
+            </span>
             <ArrowRight className="h-4 w-4" />
           </button>
         </form>

@@ -225,3 +225,62 @@ export function me(req: AuthRequest, res: Response) {
   }
   return res.json({ user });
 }
+
+/**
+ * Public Citizen Access Login - Accepts any valid email format and grants a guest citizen session.
+ * Does NOT require password or Clerk account. Enforces role = 'user'.
+ */
+export function citizenLogin(req: Request, res: Response) {
+  try {
+    const { email } = req.body;
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({ error: 'Email address is required for public citizen access.' });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Fetch existing user or create a guest citizen user
+    let user = (db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail) as unknown) as User | undefined;
+
+    if (!user) {
+      const userId = crypto.randomUUID();
+      const userName = cleanEmail.split('@')[0];
+      db.prepare(`
+        INSERT INTO users (id, email, name, password_hash, role)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(userId, cleanEmail, userName, '', 'user');
+
+      user = (db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail) as unknown) as User;
+    }
+
+    // Force public citizen session to strictly role = 'user' (never trust frontend role values)
+    const citizenUser = {
+      id: user.id,
+      email: cleanEmail,
+      name: user.name || cleanEmail.split('@')[0],
+      role: 'user' as const
+    };
+
+    const token = generateToken(citizenUser);
+
+    return res.json({
+      message: 'Citizen public access granted!',
+      token,
+      user: {
+        id: citizenUser.id,
+        email: citizenUser.email,
+        name: citizenUser.name,
+        role: 'user'
+      }
+    });
+  } catch (error: any) {
+    console.error('Citizen login error:', error);
+    return res.status(500).json({ error: 'Internal server error during citizen login.' });
+  }
+}
