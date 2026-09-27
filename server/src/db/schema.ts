@@ -107,6 +107,13 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_emergency_status ON emergency_reports(status);
     CREATE INDEX IF NOT EXISTS idx_emergency_severity ON emergency_reports(severity);
     CREATE INDEX IF NOT EXISTS idx_emergency_created ON emergency_reports(created_at);
+  `);
+
+  // Non-destructive migrations for user identification
+  try { db.exec('ALTER TABLE emergency_reports ADD COLUMN user_id TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE emergency_reports ADD COLUMN user_email TEXT;'); } catch {}
+
+  db.exec(`
 
     CREATE TABLE IF NOT EXISTS police_stations (
       id TEXT PRIMARY KEY,

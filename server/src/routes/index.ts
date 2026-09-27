@@ -55,6 +55,7 @@ router.get('/reports/region', optionalAuthenticate, reportsController.getRegionR
 // Citizen & Police Emergency Routes
 router.post('/emergency/report', emergencyUpload, emergencyController.createReport);
 router.get('/emergency/reports', optionalAuthenticate, emergencyController.getReports);
+router.get('/emergency/my-reports', optionalAuthenticate, emergencyController.getMyReports);
 router.get('/emergency/reports/:code', optionalAuthenticate, emergencyController.getReportByCode);
 router.put('/emergency/reports/:code/status', optionalAuthenticate, emergencyController.updateReportStatus);
 router.post('/emergency/reports/:code/assign-patrol', optionalAuthenticate, emergencyController.assignPatrol);
@@ -68,6 +69,14 @@ router.post(
 router.get('/emergency/audit-trail', optionalAuthenticate, emergencyController.getAuditTrail);
 router.post('/emergency/check-escalations', optionalAuthenticate, emergencyController.triggerEscalationCheck);
 router.get('/emergency/stream', emergencyController.streamEmergencyEvents);
+
+// Incident API Aliases for Frontend Compatibility
+router.post('/incidents/report', emergencyUpload, emergencyController.createReport);
+router.get('/incidents/my-reports', optionalAuthenticate, emergencyController.getMyReports);
+router.get('/incidents/police-feed', optionalAuthenticate, emergencyController.getReports);
+router.put('/incidents/:code/status', optionalAuthenticate, emergencyController.updateReportStatus);
+router.post('/incidents/:code/assign-patrol', optionalAuthenticate, emergencyController.assignPatrol);
+router.get('/incidents/police-actions/logs', optionalAuthenticate, emergencyController.getAuditTrail);
 
 // Nearest Police Station & Patrol Dispatch Routes
 router.get('/emergency/stations', optionalAuthenticate, emergencyController.getAllPoliceStations);

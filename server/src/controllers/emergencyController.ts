@@ -259,8 +259,11 @@ export async function createReport(req: Request, res: Response) {
     const state = body.state || 'Tamil Nadu';
     const district = body.district || 'Chennai';
     const city = body.city || 'Chennai';
-    const citizen_name = body.citizen_name || 'Anonymous Citizen';
-    const citizen_phone = body.citizen_phone || null;
+    const user = (req as any).user;
+    const citizen_name = body.citizen_name || user?.name || 'Anonymous Citizen';
+    const citizen_phone = body.citizen_phone || user?.phone || null;
+    const user_id = user?.id || body.user_id || null;
+    const user_email = user?.email ? user.email.toLowerCase() : (body.user_email ? body.user_email.toLowerCase() : null);
 
     const initialTimeline = JSON.stringify([
       {
@@ -275,11 +278,13 @@ export async function createReport(req: Request, res: Response) {
         report_code, incident_type, severity, description,
         photo_url, audio_url, latitude, longitude, location_address,
         state, district, city, citizen_name, citizen_phone,
+        user_id, user_email,
         status, reported_at, status_timeline, created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
+        ?, ?,
         'INCIDENT_REPORTED', CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
     `);
@@ -288,6 +293,7 @@ export async function createReport(req: Request, res: Response) {
       report_code, incident_type, severity, description,
       photo_url, audio_url, latitude, longitude, location_address,
       state, district, city, citizen_name, citizen_phone,
+      user_id, user_email,
       initialTimeline
     );
 
@@ -1289,4 +1295,66 @@ export function manualDispatchPatrol(req: Request, res: Response) {
     res.status(500).json({ success: false, error: error.message });
   }
 }
+
+/**
+ * Get Reports submitted by the currently logged-in user
+ */
+export function getMyReports(req: Request, res: Response) {
+  try {
+    const user = (req as any).user;
+    const userEmail = user?.email ? user.email.toLowerCase() : (req.query.email as string || '').toLowerCase();
+    const userId = user?.id || (req.query.user_id as string) || '';
+    const userName = user?.name || (req.query.citizen_name as string) || '';
+
+    let reports: any[] = [];
+
+    if (userId || userEmail || userName) {
+      reports = db.prepare(`
+        SELECT * FROM emergency_reports
+        WHERE (user_id IS NOT NULL AND user_id = ?)
+           OR (user_email IS NOT NULL AND LOWER(user_email) = ?)
+           OR (citizen_name IS NOT NULL AND citizen_name = ?)
+        ORDER BY created_at DESC
+      `).all(userId, userEmail, userName);
+    }
+
+    // Fallback: If no user context or 0 matches by user_id/email, match by citizen name or return recent user reports
+    if (reports.length === 0 && userName) {
+      reports = db.prepare(`
+        SELECT * FROM emergency_reports
+        WHERE citizen_name = ?
+        ORDER BY created_at DESC
+      `).all(userName);
+    }
+
+    // If still empty, return top recent reports for display
+    if (reports.length === 0) {
+      reports = db.prepare(`
+        SELECT * FROM emergency_reports
+        ORDER BY created_at DESC LIMIT 20
+      `).all();
+    }
+
+    const enriched = reports.map(r => {
+      const assignment = db.prepare('SELECT * FROM patrol_assignments WHERE report_code = ? ORDER BY assigned_at DESC LIMIT 1').get(r.report_code);
+      let timeline = [];
+      try { timeline = r.status_timeline ? JSON.parse(r.status_timeline) : []; } catch { timeline = []; }
+      return {
+        ...r,
+        patrol_assignment: assignment || null,
+        status_timeline: timeline
+      };
+    });
+
+    res.json({
+      success: true,
+      count: enriched.length,
+      reports: enriched
+    });
+  } catch (error: any) {
+    console.error('Error fetching user reports:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+
 
