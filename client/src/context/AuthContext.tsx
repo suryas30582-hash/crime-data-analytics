@@ -17,6 +17,8 @@ interface AuthContextType {
   hasRole: (role: RoleType) => boolean;
   login: (credentials: { email: string; password: string; expectedRole?: string }) => Promise<User>;
   citizenLogin: (data: { email: string }) => Promise<User>;
+  sendOTP: (data: { email: string; expectedRole?: string }) => Promise<string>;
+  verifyOTP: (data: { email: string; code: string; expectedRole?: string }) => Promise<User>;
   googleLogin: (data: { email: string; name?: string; credentialToken?: string; expectedRole?: string }) => Promise<User>;
   register: (data: {
     name: string;
@@ -163,6 +165,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const currentRole = user?.role || null;
 
+  const sendOTP = async (data: { email: string; expectedRole?: string }): Promise<string> => {
+    const res = await api.sendOTP(data);
+    return res.message;
+  };
+
+  const verifyOTP = async (data: { email: string; code: string; expectedRole?: string }): Promise<User> => {
+    const res = await api.verifyOTP(data);
+    localStorage.setItem('crime_auth_token', res.token);
+    setToken(res.token);
+    setUser(res.user);
+    return res.user;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -177,6 +192,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hasRole,
         login,
         citizenLogin,
+        sendOTP,
+        verifyOTP,
         googleLogin,
         register,
         forgotPassword,

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { db } from '../db/schema';
+import nodemailer from 'nodemailer';
 import { syncUserToSupabase } from '../db/supabaseSync';
 import { generateToken, AuthRequest } from '../middleware/auth';
 
@@ -301,5 +302,207 @@ export function citizenLogin(req: Request, res: Response) {
   } catch (error: any) {
     console.error('Citizen login error:', error);
     return res.status(500).json({ error: 'Internal server error during citizen login.' });
+  }
+}
+
+/**
+ * Send OTP Verification Code to User's Email
+ */
+export async function sendOTP(req: Request, res: Response) {
+  try {
+    const { email, expectedRole } = req.body;
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({ error: 'Please enter your email address.' });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Server-side Authorization Check for Admin / Police
+    if (expectedRole === 'admin' && cleanEmail !== 'suryas30582@gmail.com') {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+
+    if (expectedRole === 'police' && cleanEmail !== 'rramiya697@gmail.com') {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+
+    // Check rate limiting (minimum 30s wait between resends)
+    const existingOtp = db.prepare('SELECT * FROM otp_codes WHERE email = ? ORDER BY created_at DESC LIMIT 1').get(cleanEmail) as any;
+    if (existingOtp) {
+      const now = new Date().getTime();
+      const resendAfter = new Date(existingOtp.resend_after).getTime();
+      if (now < resendAfter) {
+        return res.status(429).json({ error: 'Please wait before requesting another verification code.' });
+      }
+    }
+
+    // Generate 6-digit numeric OTP securely
+    const rawCode = String(crypto.randomInt(100000, 999999));
+    const codeHash = bcrypt.hashSync(rawCode, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes expiry
+    const resendAfter = new Date(Date.now() + 30 * 1000).toISOString(); // 30s resend wait
+
+    // Clean old OTP entries for this email
+    db.prepare('DELETE FROM otp_codes WHERE email = ?').run(cleanEmail);
+
+    // Save hashed OTP securely in database
+    db.prepare(`
+      INSERT INTO otp_codes (id, email, code_hash, expires_at, attempts, resend_after)
+      VALUES (?, ?, ?, ?, 0, ?)
+    `).run(crypto.randomUUID(), cleanEmail, codeHash, expiresAt, resendAfter);
+
+    // Dispatch OTP via Nodemailer email service
+    try {
+      let transporter;
+      if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+        transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST,
+          port: Number(process.env.SMTP_PORT) || 587,
+          secure: process.env.SMTP_SECURE === 'true',
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS
+          }
+        });
+      } else {
+        transporter = nodemailer.createTransport({
+          jsonTransport: true
+        });
+      }
+
+      await transporter.sendMail({
+        from: '"Crime Analytics Portal" <no-reply@crimeanalytics.gov.in>',
+        to: cleanEmail,
+        subject: 'Verification Code - Crime Data Analytics Portal',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #eedfd9; border-radius: 12px;">
+            <h2 style="color: #883a2e;">Crime Data Analytics Portal</h2>
+            <p>Your 6-digit verification code is:</p>
+            <div style="font-size: 32px; font-weight: bold; color: #2b1f1d; letter-spacing: 4px; padding: 12px; background: #fff7f4; text-align: center; border-radius: 8px;">
+              ${rawCode}
+            </div>
+            <p style="color: #7a6360; font-size: 12px; margin-top: 20px;">This code will expire in 10 minutes. Do not share this code with anyone.</p>
+          </div>
+        `
+      });
+    } catch (mailErr) {
+      console.warn('Nodemailer dispatch notice:', mailErr);
+    }
+
+    return res.json({ message: 'Verification code sent to your email.' });
+  } catch (error: any) {
+    console.error('Send OTP error:', error);
+    return res.status(500).json({ error: 'Failed to send verification code. Please try again.' });
+  }
+}
+
+/**
+ * Verify OTP Code and Complete Authentication
+ */
+export async function verifyOTP(req: Request, res: Response) {
+  try {
+    const { email, code, expectedRole } = req.body;
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({ error: 'Email address is required.' });
+    }
+
+    if (!code || !String(code).trim()) {
+      return res.status(400).json({ error: 'Verification code is required.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanCode = String(code).trim();
+
+    // Server-side Authorization Check for Admin / Police
+    if (expectedRole === 'admin' && cleanEmail !== 'suryas30582@gmail.com') {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+
+    if (expectedRole === 'police' && cleanEmail !== 'rramiya697@gmail.com') {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+
+    // Lookup active OTP record
+    const otpRecord = db.prepare('SELECT * FROM otp_codes WHERE email = ? ORDER BY created_at DESC LIMIT 1').get(cleanEmail) as any;
+
+    if (!otpRecord) {
+      return res.status(400).json({ error: 'Verification code has expired or is invalid. Please request a new code.' });
+    }
+
+    const now = new Date().getTime();
+    const expiresAt = new Date(otpRecord.expires_at).getTime();
+
+    if (now > expiresAt) {
+      db.prepare('DELETE FROM otp_codes WHERE id = ?').run(otpRecord.id);
+      return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' });
+    }
+
+    if (otpRecord.attempts >= 5) {
+      db.prepare('DELETE FROM otp_codes WHERE id = ?').run(otpRecord.id);
+      return res.status(429).json({ error: 'Too many failed verification attempts. Please request a new code.' });
+    }
+
+    // Verify OTP hash securely
+    const isMatch = bcrypt.compareSync(cleanCode, otpRecord.code_hash);
+    if (!isMatch) {
+      db.prepare('UPDATE otp_codes SET attempts = attempts + 1 WHERE id = ?').run(otpRecord.id);
+      return res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
+    }
+
+    // Invalidate OTP (single-use)
+    db.prepare('DELETE FROM otp_codes WHERE id = ?').run(otpRecord.id);
+
+    // Determine Role Server-Side ONLY
+    let role: 'admin' | 'police' | 'user' = 'user';
+    if (cleanEmail === 'suryas30582@gmail.com') {
+      role = 'admin';
+    } else if (cleanEmail === 'rramiya697@gmail.com') {
+      role = 'police';
+    }
+
+    // Provision/Fetch User record in DB
+    let user = (db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail) as unknown) as User | undefined;
+
+    if (!user) {
+      const userId = crypto.randomUUID();
+      const userName = cleanEmail === 'suryas30582@gmail.com'
+        ? 'Suriya (Admin)'
+        : cleanEmail === 'rramiya697@gmail.com'
+          ? 'Inspector Ramiya (Peelamedu PS)'
+          : cleanEmail.split('@')[0];
+
+      db.prepare(`
+        INSERT INTO users (id, email, name, password_hash, role)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(userId, cleanEmail, userName, '', role);
+
+      user = (db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail) as unknown) as User;
+    } else if (user.role !== role) {
+      db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, user.id);
+      user.role = role;
+    }
+
+    const token = generateToken(user);
+
+    return res.json({
+      message: 'Login successful!',
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      }
+    });
+  } catch (error: any) {
+    console.error('Verify OTP error:', error);
+    return res.status(500).json({ error: 'Internal server error during OTP verification.' });
   }
 }

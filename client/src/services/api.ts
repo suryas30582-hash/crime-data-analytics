@@ -67,6 +67,16 @@ export const api = {
     body: JSON.stringify(data)
   }),
 
+  sendOTP: (data: { email: string; expectedRole?: string }) => request<{ message: string }>('/auth/send-otp', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+
+  verifyOTP: (data: { email: string; code: string; expectedRole?: string }) => request<{ message: string; token: string; user: User }>('/auth/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+
   googleLogin: (data: any) => request<{ message: string; token: string; user: User }>('/auth/google', {
     method: 'POST',
     body: JSON.stringify(data)

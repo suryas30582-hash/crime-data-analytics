@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useSignIn } from '@clerk/react/legacy';
-import { useClerk } from '@clerk/react';
-import { Shield, Lock, Mail, Eye, EyeOff, AlertCircle, ArrowRight, UserCheck, ShieldAlert, KeyRound } from 'lucide-react';
+import { Mail, AlertCircle, ArrowRight, UserCheck, ShieldAlert, KeyRound, CheckCircle2, RefreshCw, Key } from 'lucide-react';
 import { useAuth, RoleType } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -15,15 +13,15 @@ export const LoginPage: React.FC = () => {
     initialRoleParam === 'police' || initialRoleParam === 'admin' ? initialRoleParam : 'user'
   );
 
+  const [step, setStep] = useState<'email' | 'otp'>('email');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+  const [resendTimer, setResendTimer] = useState<number>(0);
 
-  const { isLoaded: isSignInLoaded, signIn, setActive } = useSignIn();
-  const { login, citizenLogin, googleLogin } = useAuth();
+  const { sendOTP, verifyOTP } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
 
@@ -32,36 +30,41 @@ export const LoginPage: React.FC = () => {
     const roleParam = new URLSearchParams(location.search).get('role') as RoleType | null;
     if (roleParam && ['user', 'police', 'admin'].includes(roleParam)) {
       setActiveRole(roleParam);
+      setStep('email');
+      setEmail('');
+      setOtpCode('');
       setError(null);
+      setInfoMessage(null);
     }
   }, [location.search]);
 
-  // Demo accounts quick-filler with configured accounts
-  const fillDemoCredentials = (role: RoleType) => {
-    setActiveRole(role);
-    setError(null);
-    if (role === 'user') {
-      setEmail('citizen.sharma@example.com');
-      setPassword('');
-    } else if (role === 'police') {
-      setEmail('rramiya697@gmail.com');
-      setPassword('PoliceSecret2026!');
-    } else if (role === 'admin') {
-      setEmail('suryas30582@gmail.com');
-      setPassword('AdminSecret2026!');
+  // Resend Timer countdown effect
+  useEffect(() => {
+    let timer: any;
+    if (resendTimer > 0) {
+      timer = setInterval(() => {
+        setResendTimer(prev => prev - 1);
+      }, 1000);
     }
+    return () => clearInterval(timer);
+  }, [resendTimer]);
+
+  const handleRoleChange = (role: RoleType) => {
+    setActiveRole(role);
+    setStep('email');
+    setEmail('');
+    setOtpCode('');
+    setError(null);
+    setInfoMessage(null);
   };
 
   const handleRedirect = (user: any) => {
     const userRoles = user.roles && user.roles.length > 0 ? user.roles : [user.role];
-    
-    // Redirect based on selected tab or highest privilege
+
     if (activeRole === 'admin' && userRoles.includes('admin')) {
       navigate('/admin/dashboard', { replace: true });
     } else if (activeRole === 'police' && userRoles.includes('police')) {
       navigate('/police/dashboard', { replace: true });
-    } else if (activeRole === 'user' && (userRoles.includes('user') || userRoles.includes('admin') || userRoles.includes('police'))) {
-      navigate('/user/dashboard', { replace: true });
     } else if (userRoles.includes('admin')) {
       navigate('/admin/dashboard', { replace: true });
     } else if (userRoles.includes('police')) {
@@ -71,101 +74,71 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setInfoMessage(null);
 
-    if (!email.trim()) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
       setError('Please enter your email address.');
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
+    if (!emailRegex.test(cleanEmail)) {
       setError('Please enter a valid email address.');
       return;
     }
 
     setIsSubmitting(true);
-
-    // PUBLIC CITIZEN ACCESS FLOW (NO PASSWORD / NO CLERK REQUIRED)
-    if (activeRole === 'user') {
-      try {
-        const user = await citizenLogin({ email: email.trim() });
-        handleRedirect(user);
-      } catch (err: any) {
-        setError(err.message || 'Unable to access Citizen Portal.');
-      } finally {
-        setIsSubmitting(false);
-      }
-      return;
-    }
-
-    // PRIVATE POLICE / ADMIN AUTHENTICATION FLOW
-    if (!password) {
-      setError('Please enter your password.');
-      setIsSubmitting(false);
-      return;
-    }
-
-    // Try Clerk Authentication first if configured
-    let clerkAuthenticated = false;
-    if (isSignInLoaded && signIn) {
-      try {
-        const result = await signIn.create({
-          identifier: email.trim(),
-          password
-        });
-
-        if (result.status === 'complete' && result.createdSessionId) {
-          await setActive({ session: result.createdSessionId });
-          clerkAuthenticated = true;
-        }
-      } catch (clerkErr: any) {
-        const errMsg = clerkErr?.errors?.[0]?.message || clerkErr?.message;
-        console.warn('Clerk sign-in notice (falling back to backend auth):', errMsg);
-      }
-    }
-
-    // Authenticate with application backend API to establish session & role
     try {
-      const user = await login({ email: email.trim(), password, expectedRole: activeRole });
-      handleRedirect(user);
+      const msg = await sendOTP({ email: cleanEmail, expectedRole: activeRole });
+      setStep('otp');
+      setInfoMessage(msg || 'Verification code sent to your email.');
+      setResendTimer(30);
     } catch (err: any) {
-      if (!clerkAuthenticated) {
-        setError(err.message || 'Invalid email or password. Please verify your credentials.');
-      }
+      setError(err.message || 'Unable to send verification code. Access denied.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleVerifyOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
-    let promptEmail = email.trim();
+    setInfoMessage(null);
 
-    if (!promptEmail) {
-      const input = window.prompt(
-        'Google OAuth Authentication\n\nPlease enter your Google Account email address (e.g. suryas30582@gmail.com or rramiya697@gmail.com):',
-        'suryas30582@gmail.com'
-      );
-      if (!input || !input.trim()) return;
-      promptEmail = input.trim();
+    const cleanCode = otpCode.trim();
+    if (!cleanCode) {
+      setError('Please enter the 6-digit verification code.');
+      return;
     }
 
+    setIsSubmitting(true);
     try {
-      setIsGoogleSubmitting(true);
-      const user = await googleLogin({
-        email: promptEmail,
-        name: promptEmail.split('@')[0],
-        credentialToken: `google_oauth_token_${Date.now()}`,
-        expectedRole: activeRole
-      });
+      const user = await verifyOTP({ email: email.trim(), code: cleanCode, expectedRole: activeRole });
       handleRedirect(user);
     } catch (err: any) {
-      setError(err.message || 'Google authentication failed or role access denied.');
+      setError(err.message || 'Verification failed. Invalid or expired code.');
     } finally {
-      setIsGoogleSubmitting(false);
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    if (resendTimer > 0) return;
+    setError(null);
+    setInfoMessage(null);
+    setIsSubmitting(true);
+    try {
+      const msg = await sendOTP({ email: email.trim(), expectedRole: activeRole });
+      setInfoMessage(msg || 'A new verification code has been sent to your email.');
+      setResendTimer(30);
+    } catch (err: any) {
+      setError(err.message || 'Unable to resend verification code.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -174,7 +147,7 @@ export const LoginPage: React.FC = () => {
       case 'police':
         return {
           title: 'Police & Officer Portal',
-          subtitle: 'Secure incident review, real-time command dispatch & status logging',
+          subtitle: 'Secure command dispatch & incident review',
           icon: ShieldAlert,
           gradient: 'from-[#542A20] to-[#883A2E]',
           tag: 'AUTHORIZED LAW ENFORCEMENT ONLY'
@@ -182,15 +155,15 @@ export const LoginPage: React.FC = () => {
       case 'admin':
         return {
           title: 'Administrator Console',
-          subtitle: 'Master control, user management, audit verification & database health',
+          subtitle: 'System management & master database access',
           icon: KeyRound,
           gradient: 'from-[#2B1F1D] to-[#542A20]',
           tag: 'SUPER-USER PRIVILEGES'
         };
       default:
         return {
-          title: 'Citizen & User Portal',
-          subtitle: 'Explore national crime datasets, analytics & report incident events',
+          title: 'Citizen & Public Portal',
+          subtitle: 'Explore crime analytics & report incident events',
           icon: UserCheck,
           gradient: 'from-[#883A2E] to-[#D65A31]',
           tag: 'PUBLIC CITIZEN ACCESS'
@@ -204,12 +177,12 @@ export const LoginPage: React.FC = () => {
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
       <div className="w-full max-w-lg space-y-6 rounded-3xl border border-[#EEDFD9] bg-[#FFFDFC] p-8 shadow-warm-xl">
-        
+
         {/* Role Switcher Tabs */}
         <div className="flex rounded-2xl bg-[#FFF7F4] p-1.5 border border-[#EEDFD9]">
           <button
             type="button"
-            onClick={() => { setActiveRole('user'); setError(null); }}
+            onClick={() => handleRoleChange('user')}
             className={`flex-1 flex items-center justify-center space-x-1.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               activeRole === 'user'
                 ? 'bg-[#883A2E] text-white shadow-sm'
@@ -221,7 +194,7 @@ export const LoginPage: React.FC = () => {
           </button>
           <button
             type="button"
-            onClick={() => { setActiveRole('police'); setError(null); }}
+            onClick={() => handleRoleChange('police')}
             className={`flex-1 flex items-center justify-center space-x-1.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               activeRole === 'police'
                 ? 'bg-[#542A20] text-white shadow-sm'
@@ -233,7 +206,7 @@ export const LoginPage: React.FC = () => {
           </button>
           <button
             type="button"
-            onClick={() => { setActiveRole('admin'); setError(null); }}
+            onClick={() => handleRoleChange('admin')}
             className={`flex-1 flex items-center justify-center space-x-1.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               activeRole === 'admin'
                 ? 'bg-[#2B1F1D] text-white shadow-sm'
@@ -263,53 +236,9 @@ export const LoginPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Quick Demo Credentials Selector */}
-        <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFF7F4] p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-[#542A20] uppercase tracking-wide">
-              Quick Test Accounts
-            </span>
-            <span className="text-[10px] text-[#7A6360]">Click to pre-fill</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => fillDemoCredentials('user')}
-              className={`px-2 py-1.5 rounded-xl text-[11px] font-medium border text-center transition-all cursor-pointer ${
-                activeRole === 'user' && email === 'citizen.sharma@example.com'
-                  ? 'border-[#883A2E] bg-[#883A2E]/10 text-[#883A2E] font-semibold'
-                  : 'border-[#EEDFD9] bg-[#FFFDFC] text-[#7A6360] hover:border-[#883A2E]/40 hover:text-[#2B1F1D]'
-              }`}
-            >
-              👤 Citizen
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemoCredentials('police')}
-              className={`px-2 py-1.5 rounded-xl text-[11px] font-medium border text-center transition-all cursor-pointer ${
-                activeRole === 'police' && email === 'rramiya697@gmail.com'
-                  ? 'border-[#542A20] bg-[#542A20]/10 text-[#542A20] font-semibold'
-                  : 'border-[#EEDFD9] bg-[#FFFDFC] text-[#7A6360] hover:border-[#542A20]/40 hover:text-[#2B1F1D]'
-              }`}
-            >
-              👮 Police
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemoCredentials('admin')}
-              className={`px-2 py-1.5 rounded-xl text-[11px] font-medium border text-center transition-all cursor-pointer ${
-                activeRole === 'admin' && email === 'suryas30582@gmail.com'
-                  ? 'border-[#2B1F1D] bg-[#2B1F1D]/10 text-[#2B1F1D] font-semibold'
-                  : 'border-[#EEDFD9] bg-[#FFFDFC] text-[#7A6360] hover:border-[#2B1F1D]/40 hover:text-[#2B1F1D]'
-              }`}
-            >
-              🛡️ Admin
-            </button>
-          </div>
-        </div>
-
+        {/* Status Alerts */}
         {error && (
-          <div className="rounded-xl border border-[#D65A31]/30 bg-[#D65A31]/10 p-3.5 text-xs text-[#D65A31] animate-in fade-in space-y-1">
+          <div className="rounded-xl border border-[#D65A31]/30 bg-[#D65A31]/10 p-3.5 text-xs text-[#D65A31] animate-in fade-in">
             <div className="flex items-start space-x-2">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <p className="font-medium">{error}</p>
@@ -317,110 +246,121 @@ export const LoginPage: React.FC = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label htmlFor="login-email" className="text-xs font-semibold text-[#2B1F1D]">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-3.5 top-3 h-4 w-4 text-[#7A6360]" />
-              <input
-                id="login-email"
-                name="email"
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder={activeRole === 'police' ? 'rramiya697@gmail.com' : activeRole === 'admin' ? 'suryas30582@gmail.com' : 'name@example.com'}
-                className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] pl-10 pr-4 py-2.5 text-xs text-[#2B1F1D] placeholder-[#7A6360]/60 focus:border-[#883A2E] focus:bg-[#FFFDFC] focus:outline-none focus:ring-1 focus:ring-[#883A2E]/30"
-              />
+        {infoMessage && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-50 p-3.5 text-xs text-emerald-800 animate-in fade-in">
+            <div className="flex items-start space-x-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
+              <p className="font-medium">{infoMessage}</p>
             </div>
           </div>
+        )}
 
-          {activeRole !== 'user' && (
-            <div className="space-y-1.5 animate-in fade-in">
-              <div className="flex items-center justify-between">
-                <label htmlFor="login-password" className="text-xs font-semibold text-[#2B1F1D]">Password</label>
-                <Link to="/forgot-password" className="text-[11px] font-medium text-[#883A2E] hover:underline">
-                  {t('forgotPassword', 'Forgot Password?')}
-                </Link>
-              </div>
+        {/* STEP 1: Email Address Input */}
+        {step === 'email' && (
+          <form onSubmit={handleSendOTP} className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="login-email" className="text-xs font-semibold text-[#2B1F1D]">
+                Email Address
+              </label>
               <div className="relative">
-                <Lock className="absolute left-3.5 top-3 h-4 w-4 text-[#7A6360]" />
+                <Mail className="absolute left-3.5 top-3 h-4 w-4 text-[#7A6360]" />
                 <input
-                  id="login-password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
+                  id="login-email"
+                  name="email"
+                  type="email"
                   required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] pl-10 pr-10 py-2.5 text-xs text-[#2B1F1D] placeholder-[#7A6360]/60 focus:border-[#883A2E] focus:bg-[#FFFDFC] focus:outline-none focus:ring-1 focus:ring-[#883A2E]/30"
+                  autoComplete="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="Enter your email address"
+                  className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] pl-10 pr-4 py-2.5 text-xs text-[#2B1F1D] placeholder-[#7A6360]/60 focus:border-[#883A2E] focus:bg-[#FFFDFC] focus:outline-none focus:ring-1 focus:ring-[#883A2E]/30"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-[#7A6360] hover:text-[#2B1F1D]"
-                  tabIndex={-1}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
               </div>
             </div>
-          )}
 
-          <button
-            type="submit"
-            disabled={isSubmitting || isGoogleSubmitting}
-            className={`flex w-full items-center justify-center space-x-2 rounded-xl py-2.5 text-xs font-semibold text-white shadow-md disabled:opacity-50 transition-all cursor-pointer bg-gradient-to-r ${portal.gradient} hover:brightness-110`}
-          >
-            <span>
-              {isSubmitting
-                ? activeRole === 'user' ? 'Accessing Citizen Portal...' : 'Authenticating Role...'
-                : activeRole === 'user' ? 'Access Citizen Portal' : `Sign In to ${portal.title}`}
-            </span>
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className={`flex w-full items-center justify-center space-x-2 rounded-xl py-2.5 text-xs font-semibold text-white shadow-md disabled:opacity-50 transition-all cursor-pointer bg-gradient-to-r ${portal.gradient} hover:brightness-110`}
+            >
+              <span>{isSubmitting ? 'Sending Verification Code...' : 'Send Verification Code'}</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </form>
+        )}
 
-        {/* Google Authentication Divider */}
-        <div className="relative flex items-center justify-center border-t border-[#EEDFD9] pt-4">
-          <span className="bg-[#FFFDFC] px-3 text-[11px] text-[#7A6360] uppercase font-semibold tracking-wider absolute -top-2.5">
-            Or continue with
-          </span>
-        </div>
+        {/* STEP 2: OTP Verification Code Input */}
+        {step === 'otp' && (
+          <form onSubmit={handleVerifyOTP} className="space-y-4 animate-in fade-in">
+            <div className="rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] p-3 text-center space-y-1">
+              <p className="text-xs font-semibold text-[#2B1F1D]">
+                Enter the verification code sent to your email
+              </p>
+              <p className="text-[11px] font-mono text-[#883A2E] truncate">
+                {email}
+              </p>
+            </div>
 
-        {/* Real Google Login Button */}
-        <button
-          type="button"
-          onClick={handleGoogleSignIn}
-          disabled={isGoogleSubmitting || isSubmitting}
-          className="flex w-full items-center justify-center space-x-2.5 rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] py-2.5 text-xs font-semibold text-[#2B1F1D] hover:bg-[#FFFDFC] hover:border-[#883A2E]/40 transition-all cursor-pointer shadow-sm disabled:opacity-50"
-        >
-          <svg className="h-4 w-4" viewBox="0 0 24 24">
-            <path
-              fill="#4285F4"
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-            />
-            <path
-              fill="#34A853"
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-            />
-            <path
-              fill="#EA4335"
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-            />
-          </svg>
-          <span>{isGoogleSubmitting ? 'Verifying Google OAuth...' : 'Continue with Google'}</span>
-        </button>
+            <div className="space-y-1.5">
+              <label htmlFor="login-otp" className="text-xs font-semibold text-[#2B1F1D]">
+                6-Digit Verification Code
+              </label>
+              <div className="relative">
+                <Key className="absolute left-3.5 top-3 h-4 w-4 text-[#7A6360]" />
+                <input
+                  id="login-otp"
+                  name="otpCode"
+                  type="text"
+                  required
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                  value={otpCode}
+                  onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="123456"
+                  className="w-full text-center tracking-[0.4em] font-mono text-base font-bold rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] pl-10 pr-4 py-2.5 text-[#2B1F1D] placeholder-[#7A6360]/40 focus:border-[#883A2E] focus:bg-[#FFFDFC] focus:outline-none focus:ring-1 focus:ring-[#883A2E]/30"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className={`flex w-full items-center justify-center space-x-2 rounded-xl py-2.5 text-xs font-semibold text-white shadow-md disabled:opacity-50 transition-all cursor-pointer bg-gradient-to-r ${portal.gradient} hover:brightness-110`}
+            >
+              <span>{isSubmitting ? 'Verifying Code...' : 'Verify & Access Dashboard'}</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
+
+            <div className="flex items-center justify-between pt-2 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setStep('email');
+                  setOtpCode('');
+                  setError(null);
+                  setInfoMessage(null);
+                }}
+                className="text-[#7A6360] hover:text-[#883A2E] hover:underline"
+              >
+                ← Change Email
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResendOTP}
+                disabled={resendTimer > 0 || isSubmitting}
+                className="flex items-center space-x-1 font-semibold text-[#883A2E] disabled:opacity-50 hover:underline cursor-pointer"
+              >
+                <RefreshCw className={`h-3 w-3 ${isSubmitting ? 'animate-spin' : ''}`} />
+                <span>{resendTimer > 0 ? `Resend Code in ${resendTimer}s` : 'Resend Code'}</span>
+              </button>
+            </div>
+          </form>
+        )}
 
         <div className="border-t border-[#EEDFD9] pt-4 text-center">
           <p className="text-xs text-[#7A6360]">
-            Don't have an account?{' '}
+            Need help?{' '}
             <Link to="/register" className="font-semibold text-[#883A2E] hover:underline">
               {t('register', 'Register as Citizen or Police Officer')}
             </Link>

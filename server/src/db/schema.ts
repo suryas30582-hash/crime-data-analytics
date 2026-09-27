@@ -223,6 +223,18 @@ export function initDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_audit_report ON incident_audit_trail(report_code);
+
+    CREATE TABLE IF NOT EXISTS otp_codes (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      code_hash TEXT NOT NULL,
+      expires_at DATETIME NOT NULL,
+      attempts INTEGER DEFAULT 0,
+      resend_after DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_otp_email ON otp_codes(email);
   `);
 
   // Non-destructive schema column migrations for emergency_reports & patrol_assignments
