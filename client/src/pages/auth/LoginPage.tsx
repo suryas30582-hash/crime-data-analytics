@@ -21,7 +21,7 @@ export const LoginPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resendTimer, setResendTimer] = useState<number>(0);
 
-  const { sendOTP, verifyOTP, policeLogin } = useAuth();
+  const { sendOTP, verifyOTP, policeLogin, citizenLogin } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
 
@@ -95,6 +95,11 @@ export const LoginPage: React.FC = () => {
     try {
       if (activeRole === 'police') {
         const user = await policeLogin({ email: cleanEmail });
+        handleRedirect(user);
+        return;
+      }
+      if (activeRole === 'user') {
+        const user = await citizenLogin({ email: cleanEmail });
         handleRedirect(user);
         return;
       }
@@ -291,8 +296,16 @@ export const LoginPage: React.FC = () => {
             >
               <span>
                 {isSubmitting
-                  ? activeRole === 'police' ? 'Authenticating Police Access...' : 'Sending Verification Code...'
-                  : activeRole === 'police' ? 'Access Police Command' : 'Send Verification Code'}
+                  ? activeRole === 'police'
+                    ? 'Authenticating Police Access...'
+                    : activeRole === 'user'
+                      ? 'Accessing Citizen Portal...'
+                      : 'Sending Verification Code...'
+                  : activeRole === 'police'
+                    ? 'Access Police Command'
+                    : activeRole === 'user'
+                      ? 'Access Citizen Portal'
+                      : 'Send Verification Code'}
               </span>
               <ArrowRight className="h-4 w-4" />
             </button>
