@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { db } from '../db/schema';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { syncUserToSupabase } from '../db/supabaseSync';
 import { generateToken, AuthRequest } from '../middleware/auth';
 
@@ -357,33 +357,21 @@ export async function sendOTP(req: Request, res: Response) {
       VALUES (?, ?, ?, ?, 0, ?)
     `).run(crypto.randomUUID(), cleanEmail, codeHash, expiresAt, resendAfter);
 
-    // Ensure SMTP service is configured before attempting email dispatch
-    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      console.warn('SMTP configuration missing: SMTP_HOST, SMTP_USER, or SMTP_PASS environment variables are not set.');
+    // Ensure Resend API Key is configured before attempting email dispatch
+    if (!process.env.RESEND_API_KEY || !process.env.RESEND_API_KEY.trim()) {
+      console.warn('Resend configuration missing: RESEND_API_KEY environment variable is not set.');
       return res.status(503).json({
-        error: 'Email delivery service is currently not configured on the server. Please configure SMTP environment variables.'
+        error: 'Email delivery service is currently not configured on the server. Please configure RESEND_API_KEY environment variable.'
       });
     }
 
-    const fromAddress = process.env.SMTP_FROM || `"${process.env.SMTP_FROM_NAME || 'Crime Analytics Portal'}" <${process.env.SMTP_USER}>`;
-
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
+    const resend = new Resend(process.env.RESEND_API_KEY.trim());
+    const fromAddress = (process.env.RESEND_FROM || 'Crime Analytics Portal <onboarding@resend.dev>').trim();
 
     try {
-      await transporter.sendMail({
+      const { data, error: sendError } = await resend.emails.send({
         from: fromAddress,
-        to: cleanEmail,
+        to: [cleanEmail],
         subject: 'Your Verification Code - Crime Data Analytics Portal',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #eedfd9; border-radius: 16px; background-color: #fffdfc;">
@@ -400,8 +388,16 @@ export async function sendOTP(req: Request, res: Response) {
           </div>
         `
       });
+
+      if (sendError) {
+        console.error('Resend email dispatch error:', sendError.message || sendError);
+        db.prepare('DELETE FROM otp_codes WHERE email = ?').run(cleanEmail);
+        return res.status(500).json({
+          error: 'Failed to deliver verification code to your email inbox. Please check the email address or try again.'
+        });
+      }
     } catch (mailErr: any) {
-      console.error('Nodemailer sendMail failed:', mailErr?.message || mailErr);
+      console.error('Resend send error:', mailErr?.message || mailErr);
       // Clean up unsent OTP entry on mail dispatch failure
       db.prepare('DELETE FROM otp_codes WHERE email = ?').run(cleanEmail);
       return res.status(500).json({
