@@ -310,25 +310,26 @@ export function citizenLogin(req: Request, res: Response) {
  */
 export async function sendOTP(req: Request, res: Response) {
   try {
-    const { email, expectedRole } = req.body;
+    const { email, expectedRole, role } = req.body;
 
-    if (!email || !email.trim()) {
+    if (!email || !String(email).trim()) {
       return res.status(400).json({ error: 'Please enter your email address.' });
     }
 
+    const cleanEmail = String(email).replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '').trim().toLowerCase();
+    const roleClean = String(expectedRole || role || '').trim().toLowerCase();
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
+    if (!emailRegex.test(cleanEmail)) {
       return res.status(400).json({ error: 'Please enter a valid email address.' });
     }
 
-    const cleanEmail = email.trim().toLowerCase();
-
     // Server-side Authorization Check for Admin / Police
-    if (expectedRole === 'admin' && cleanEmail !== 'suryas30582@gmail.com') {
+    if (roleClean === 'admin' && cleanEmail !== 'suryas30582@gmail.com') {
       return res.status(403).json({ error: 'Access denied.' });
     }
 
-    if (expectedRole === 'police' && cleanEmail !== 'rramiya697@gmail.com') {
+    if (roleClean === 'police' && cleanEmail !== 'rramiya697@gmail.com') {
       return res.status(403).json({ error: 'Access denied.' });
     }
 
@@ -417,9 +418,9 @@ export async function sendOTP(req: Request, res: Response) {
  */
 export async function verifyOTP(req: Request, res: Response) {
   try {
-    const { email, code, expectedRole } = req.body;
+    const { email, code, expectedRole, role } = req.body;
 
-    if (!email || !email.trim()) {
+    if (!email || !String(email).trim()) {
       return res.status(400).json({ error: 'Email address is required.' });
     }
 
@@ -427,15 +428,16 @@ export async function verifyOTP(req: Request, res: Response) {
       return res.status(400).json({ error: 'Verification code is required.' });
     }
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = String(email).replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '').trim().toLowerCase();
     const cleanCode = String(code).trim();
+    const roleClean = String(expectedRole || role || '').trim().toLowerCase();
 
     // Server-side Authorization Check for Admin / Police
-    if (expectedRole === 'admin' && cleanEmail !== 'suryas30582@gmail.com') {
+    if (roleClean === 'admin' && cleanEmail !== 'suryas30582@gmail.com') {
       return res.status(403).json({ error: 'Access denied.' });
     }
 
-    if (expectedRole === 'police' && cleanEmail !== 'rramiya697@gmail.com') {
+    if (roleClean === 'police' && cleanEmail !== 'rramiya697@gmail.com') {
       return res.status(403).json({ error: 'Access denied.' });
     }
 
@@ -470,11 +472,11 @@ export async function verifyOTP(req: Request, res: Response) {
     db.prepare('DELETE FROM otp_codes WHERE id = ?').run(otpRecord.id);
 
     // Determine Role Server-Side ONLY
-    let role: 'admin' | 'police' | 'user' = 'user';
+    let userRole: 'admin' | 'police' | 'user' = 'user';
     if (cleanEmail === 'suryas30582@gmail.com') {
-      role = 'admin';
+      userRole = 'admin';
     } else if (cleanEmail === 'rramiya697@gmail.com') {
-      role = 'police';
+      userRole = 'police';
     }
 
     // Provision/Fetch User record in DB
@@ -491,12 +493,12 @@ export async function verifyOTP(req: Request, res: Response) {
       db.prepare(`
         INSERT INTO users (id, email, name, password_hash, role)
         VALUES (?, ?, ?, ?, ?)
-      `).run(userId, cleanEmail, userName, '', role);
+      `).run(userId, cleanEmail, userName, '', userRole);
 
       user = (db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail) as unknown) as User;
-    } else if (user.role !== role) {
-      db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, user.id);
-      user.role = role;
+    } else if (user.role !== userRole) {
+      db.prepare('UPDATE users SET role = ? WHERE id = ?').run(userRole, user.id);
+      user.role = userRole;
     }
 
     const token = generateToken(user);
