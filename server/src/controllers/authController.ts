@@ -306,6 +306,71 @@ export function citizenLogin(req: Request, res: Response) {
 }
 
 /**
+ * Police Command Direct Authentication - Server-side authorization for official Police email.
+ * Bypasses OTP requirement for Police while strictly enforcing server-side email authorization.
+ */
+export function policeLogin(req: Request, res: Response) {
+  try {
+    const { email } = req.body;
+
+    if (!email || !String(email).trim()) {
+      return res.status(400).json({ error: 'Please enter your email address.' });
+    }
+
+    const cleanEmail = String(email).replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '').trim().toLowerCase();
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    // Server-side Authorization Check: Strictly restricted to authorized Police email
+    if (cleanEmail !== 'rramiya697@gmail.com') {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+
+    // Fetch existing user or auto-provision Police user record
+    let user = (db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail) as unknown) as User | undefined;
+
+    if (!user) {
+      const userId = crypto.randomUUID();
+      db.prepare(`
+        INSERT INTO users (id, email, name, password_hash, role)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(userId, cleanEmail, 'Inspector Ramiya (Peelamedu PS)', '', 'police');
+
+      user = (db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(cleanEmail) as unknown) as User;
+    } else if (user.role !== 'police') {
+      db.prepare('UPDATE users SET role = ? WHERE id = ?').run('police', user.id);
+      user.role = 'police';
+    }
+
+    const policeUser = {
+      id: user.id,
+      email: cleanEmail,
+      name: user.name || 'Inspector Ramiya (Peelamedu PS)',
+      role: 'police' as const
+    };
+
+    const token = generateToken(policeUser);
+
+    return res.json({
+      message: 'Police authorization successful!',
+      token,
+      user: {
+        id: policeUser.id,
+        email: policeUser.email,
+        name: policeUser.name,
+        role: 'police'
+      }
+    });
+  } catch (error: any) {
+    console.error('Police login error:', error);
+    return res.status(500).json({ error: 'Internal server error during police login.' });
+  }
+}
+
+/**
  * Send OTP Verification Code to User's Email
  */
 export async function sendOTP(req: Request, res: Response) {

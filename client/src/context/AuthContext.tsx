@@ -17,6 +17,7 @@ interface AuthContextType {
   hasRole: (role: RoleType) => boolean;
   login: (credentials: { email: string; password: string; expectedRole?: string }) => Promise<User>;
   citizenLogin: (data: { email: string }) => Promise<User>;
+  policeLogin: (data: { email: string }) => Promise<User>;
   sendOTP: (data: { email: string; expectedRole?: string }) => Promise<string>;
   verifyOTP: (data: { email: string; code: string; expectedRole?: string }) => Promise<User>;
   googleLogin: (data: { email: string; name?: string; credentialToken?: string; expectedRole?: string }) => Promise<User>;
@@ -113,6 +114,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res.user;
   };
 
+  const policeLogin = async (data: { email: string }): Promise<User> => {
+    const res = await api.policeLogin(data);
+    localStorage.setItem('crime_auth_token', res.token);
+    setToken(res.token);
+    setUser(res.user);
+    return res.user;
+  };
+
   const googleLogin = async (data: { email: string; name?: string; credentialToken?: string; expectedRole?: string }): Promise<User> => {
     const res = await api.googleLogin(data);
     localStorage.setItem('crime_auth_token', res.token);
@@ -192,6 +201,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hasRole,
         login,
         citizenLogin,
+        policeLogin,
         sendOTP,
         verifyOTP,
         googleLogin,

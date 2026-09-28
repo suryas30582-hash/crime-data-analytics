@@ -21,7 +21,7 @@ export const LoginPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resendTimer, setResendTimer] = useState<number>(0);
 
-  const { sendOTP, verifyOTP } = useAuth();
+  const { sendOTP, verifyOTP, policeLogin } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
 
@@ -93,12 +93,17 @@ export const LoginPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      if (activeRole === 'police') {
+        const user = await policeLogin({ email: cleanEmail });
+        handleRedirect(user);
+        return;
+      }
       const msg = await sendOTP({ email: cleanEmail, expectedRole: activeRole });
       setStep('otp');
       setInfoMessage(msg || 'Verification code sent to your email.');
       setResendTimer(30);
     } catch (err: any) {
-      setError(err.message || 'Unable to send verification code. Access denied.');
+      setError(err.message || 'Unable to authenticate account. Access denied.');
     } finally {
       setIsSubmitting(false);
     }
@@ -279,11 +284,16 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <button
-              type="submit"
+              type="button"
+              onClick={handleSendOTP}
               disabled={isSubmitting}
               className={`flex w-full items-center justify-center space-x-2 rounded-xl py-2.5 text-xs font-semibold text-white shadow-md disabled:opacity-50 transition-all cursor-pointer bg-gradient-to-r ${portal.gradient} hover:brightness-110`}
             >
-              <span>{isSubmitting ? 'Sending Verification Code...' : 'Send Verification Code'}</span>
+              <span>
+                {isSubmitting
+                  ? activeRole === 'police' ? 'Authenticating Police Access...' : 'Sending Verification Code...'
+                  : activeRole === 'police' ? 'Access Police Command' : 'Send Verification Code'}
+              </span>
               <ArrowRight className="h-4 w-4" />
             </button>
           </form>

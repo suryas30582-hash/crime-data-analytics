@@ -67,6 +67,11 @@ export const api = {
     body: JSON.stringify(data)
   }),
 
+  policeLogin: (data: { email: string }) => request<{ message: string; token: string; user: User }>('/auth/police-login', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+
   sendOTP: (data: { email: string; expectedRole?: string }) => request<{ message: string }>('/auth/send-otp', {
     method: 'POST',
     body: JSON.stringify(data)

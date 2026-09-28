@@ -25,6 +25,7 @@ const emergencyUpload = upload.fields([
 router.post('/auth/register', authController.register);
 router.post('/auth/login', authController.login);
 router.post('/auth/citizen-login', authController.citizenLogin);
+router.post('/auth/police-login', authController.policeLogin);
 router.post('/auth/send-otp', authController.sendOTP);
 router.post('/auth/verify-otp', authController.verifyOTP);
 router.post('/auth/forgot-password', authController.forgotPassword);
