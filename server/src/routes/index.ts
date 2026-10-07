@@ -8,6 +8,7 @@ import * as uploadController from '../controllers/uploadController';
 import * as predictionsController from '../controllers/predictionsController';
 import * as reportsController from '../controllers/reportsController';
 import * as emergencyController from '../controllers/emergencyController';
+import * as adminController from '../controllers/adminController';
 import { authenticate, optionalAuthenticate, requireAdmin } from '../middleware/auth';
 
 const router = Router();
@@ -59,9 +60,13 @@ router.get('/reports/region', optionalAuthenticate, reportsController.getRegionR
 // Citizen & Police Emergency Routes
 router.post('/emergency/report', emergencyUpload, emergencyController.createReport);
 router.get('/emergency/reports', optionalAuthenticate, emergencyController.getReports);
+router.get('/emergency/stats', optionalAuthenticate, emergencyController.getStats);
 router.get('/emergency/my-reports', optionalAuthenticate, emergencyController.getMyReports);
 router.get('/emergency/reports/:code', optionalAuthenticate, emergencyController.getReportByCode);
 router.put('/emergency/reports/:code/status', optionalAuthenticate, emergencyController.updateReportStatus);
+router.patch('/emergency/reports/:code/status', optionalAuthenticate, emergencyController.updateReportStatus);
+router.post('/emergency/reports/:code/patrol-status', optionalAuthenticate, emergencyController.updatePatrolLifecycleStatus);
+router.patch('/emergency/reports/:code/patrol-status', optionalAuthenticate, emergencyController.updatePatrolLifecycleStatus);
 router.post('/emergency/reports/:code/assign-patrol', optionalAuthenticate, emergencyController.assignPatrol);
 router.post('/emergency/reports/:code/backup-request', optionalAuthenticate, emergencyController.requestBackup);
 router.post(
@@ -73,12 +78,15 @@ router.post(
 router.get('/emergency/audit-trail', optionalAuthenticate, emergencyController.getAuditTrail);
 router.post('/emergency/check-escalations', optionalAuthenticate, emergencyController.triggerEscalationCheck);
 router.get('/emergency/stream', emergencyController.streamEmergencyEvents);
+router.delete('/emergency/reports/:code/media/:mediaType', optionalAuthenticate, emergencyController.deleteReportMedia);
 
 // Incident API Aliases for Frontend Compatibility
 router.post('/incidents/report', emergencyUpload, emergencyController.createReport);
 router.get('/incidents/my-reports', optionalAuthenticate, emergencyController.getMyReports);
 router.get('/incidents/police-feed', optionalAuthenticate, emergencyController.getReports);
+router.get('/incidents/stats', optionalAuthenticate, emergencyController.getStats);
 router.put('/incidents/:code/status', optionalAuthenticate, emergencyController.updateReportStatus);
+router.patch('/incidents/:code/status', optionalAuthenticate, emergencyController.updateReportStatus);
 router.post('/incidents/:code/assign-patrol', optionalAuthenticate, emergencyController.assignPatrol);
 router.get('/incidents/police-actions/logs', optionalAuthenticate, emergencyController.getAuditTrail);
 
@@ -86,7 +94,23 @@ router.get('/incidents/police-actions/logs', optionalAuthenticate, emergencyCont
 router.get('/emergency/stations', optionalAuthenticate, emergencyController.getAllPoliceStations);
 router.get('/emergency/nearest-station', optionalAuthenticate, emergencyController.getNearestPoliceStation);
 router.post('/emergency/patrol-status', optionalAuthenticate, emergencyController.updatePatrolLifecycleStatus);
+router.patch('/emergency/patrol-status', optionalAuthenticate, emergencyController.updatePatrolLifecycleStatus);
 router.post('/emergency/manual-dispatch', optionalAuthenticate, emergencyController.manualDispatchPatrol);
 
+// Officer notification badge count & report viewing endpoints
+router.get('/emergency/unread-count', optionalAuthenticate, emergencyController.getUnreadCount);
+router.post('/emergency/reports/:code/read', optionalAuthenticate, emergencyController.markReportRead);
+router.post('/emergency/reports/:code/view', optionalAuthenticate, emergencyController.markReportViewed);
+router.post('/incidents/:code/view', optionalAuthenticate, emergencyController.markReportViewed);
+
+// Admin User Management & System Stats Routes
+router.get('/admin/users', authenticate, requireAdmin, adminController.getAdminUsers);
+router.post('/admin/users', authenticate, requireAdmin, adminController.createAdminUser);
+router.put('/admin/users/:id', authenticate, requireAdmin, adminController.updateAdminUser);
+router.put('/admin/users/:id/role', authenticate, requireAdmin, adminController.updateAdminUser);
+router.delete('/admin/users/:id', authenticate, requireAdmin, adminController.deleteAdminUser);
+router.get('/admin/system-stats', authenticate, requireAdmin, adminController.getAdminSystemStats);
+
 export default router;
+
 

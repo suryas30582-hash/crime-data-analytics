@@ -14,7 +14,7 @@ import fs from 'fs';
 
 
 // Setup uploads directory for emergency media
-const uploadsDir = path.resolve(__dirname, '../../uploads/emergency');
+const uploadsDir = path.resolve(__dirname, '../../../uploads/emergency');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -198,55 +198,84 @@ export async function createReport(req: Request, res: Response) {
       const photoFile = files['photo'][0];
       const ext = path.extname(photoFile.originalname) || '.jpg';
       const filename = `photo_${report_code}_${Date.now()}${ext}`;
-      const filepath = path.join(uploadsDir, filename);
-      fs.writeFileSync(filepath, photoFile.buffer);
-      photo_url = `/uploads/emergency/${filename}`;
 
-      // Upload to Supabase Storage bucket 'emergency-images'
-      const sbUrl = await uploadToSupabaseStorage('emergency-images', filename, photoFile.buffer, photoFile.mimetype);
-      if (sbUrl) photo_url = sbUrl;
+      // Always upload to Supabase Storage first (persistent cloud URL)
+      const sbUrl = await uploadToSupabaseStorage('emergency-images', filename, photoFile.buffer, photoFile.mimetype || 'image/jpeg');
+      if (sbUrl) {
+        photo_url = sbUrl;
+      } else {
+        // Supabase upload failed — write local fallback for dev, but DO NOT store local path in DB for production
+        try { fs.writeFileSync(path.join(uploadsDir, filename), photoFile.buffer); } catch (_) {}
+        console.warn(`[Photo] Supabase upload failed for ${filename}. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars. photo_url will be null.`);
+        photo_url = null;
+      }
     } else if (body.photo_base64) {
       try {
         const matches = body.photo_base64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         if (matches && matches.length === 3) {
           const buffer = Buffer.from(matches[2], 'base64');
           const filename = `photo_${report_code}_${Date.now()}.jpg`;
-          fs.writeFileSync(path.join(uploadsDir, filename), buffer);
-          photo_url = `/uploads/emergency/${filename}`;
 
           const sbUrl = await uploadToSupabaseStorage('emergency-images', filename, buffer, 'image/jpeg');
-          if (sbUrl) photo_url = sbUrl;
+          if (sbUrl) {
+            photo_url = sbUrl;
+          } else {
+            try { fs.writeFileSync(path.join(uploadsDir, filename), buffer); } catch (_) {}
+            console.warn(`[Photo base64] Supabase upload failed for ${filename}. photo_url will be null.`);
+            photo_url = null;
+          }
         }
       } catch (e) {
-        console.error('Error saving base64 photo:', e);
+        console.error('Error processing base64 photo:', e);
       }
     }
 
     if (files && files['audio'] && files['audio'][0]) {
       const audioFile = files['audio'][0];
-      const ext = path.extname(audioFile.originalname) || '.webm';
+      let ext = path.extname(audioFile.originalname);
+      if (!ext || ext === '.blob') {
+        if (audioFile.mimetype?.includes('mp4') || audioFile.mimetype?.includes('aac')) ext = '.mp4';
+        else if (audioFile.mimetype?.includes('ogg')) ext = '.ogg';
+        else if (audioFile.mimetype?.includes('wav')) ext = '.wav';
+        else ext = '.webm';
+      }
       const filename = `audio_${report_code}_${Date.now()}${ext}`;
-      const filepath = path.join(uploadsDir, filename);
-      fs.writeFileSync(filepath, audioFile.buffer);
-      audio_url = `/uploads/emergency/${filename}`;
+      const mimeType = audioFile.mimetype || (ext === '.mp4' ? 'audio/mp4' : 'audio/webm');
 
-      // Upload to Supabase Storage bucket 'emergency-audio'
-      const sbUrl = await uploadToSupabaseStorage('emergency-audio', filename, audioFile.buffer, audioFile.mimetype);
-      if (sbUrl) audio_url = sbUrl;
+      // Always upload to Supabase Storage first (persistent cloud URL)
+      const sbUrl = await uploadToSupabaseStorage('emergency-audio', filename, audioFile.buffer, mimeType);
+      if (sbUrl) {
+        audio_url = sbUrl;
+      } else {
+        // Supabase upload failed — write local fallback for dev, but DO NOT store local path in DB for production
+        try { fs.writeFileSync(path.join(uploadsDir, filename), audioFile.buffer); } catch (_) {}
+        console.warn(`[Audio] Supabase upload failed for ${filename}. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars. audio_url will be null.`);
+        audio_url = null;
+      }
     } else if (body.audio_base64) {
       try {
         const matches = body.audio_base64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         if (matches && matches.length === 3) {
-          const buffer = Buffer.from(matches[2], 'base64');
-          const filename = `audio_${report_code}_${Date.now()}.webm`;
-          fs.writeFileSync(path.join(uploadsDir, filename), buffer);
-          audio_url = `/uploads/emergency/${filename}`;
+          const mime = matches[1];
+          let ext = '.webm';
+          if (mime.includes('mp4') || mime.includes('aac')) ext = '.mp4';
+          else if (mime.includes('ogg')) ext = '.ogg';
+          else if (mime.includes('wav')) ext = '.wav';
 
-          const sbUrl = await uploadToSupabaseStorage('emergency-audio', filename, buffer, 'audio/webm');
-          if (sbUrl) audio_url = sbUrl;
+          const buffer = Buffer.from(matches[2], 'base64');
+          const filename = `audio_${report_code}_${Date.now()}${ext}`;
+
+          const sbUrl = await uploadToSupabaseStorage('emergency-audio', filename, buffer, mime || 'audio/webm');
+          if (sbUrl) {
+            audio_url = sbUrl;
+          } else {
+            try { fs.writeFileSync(path.join(uploadsDir, filename), buffer); } catch (_) {}
+            console.warn(`[Audio base64] Supabase upload failed for ${filename}. audio_url will be null.`);
+            audio_url = null;
+          }
         }
       } catch (e) {
-        console.error('Error saving base64 audio:', e);
+        console.error('Error processing base64 audio:', e);
       }
     }
 
@@ -255,46 +284,52 @@ export async function createReport(req: Request, res: Response) {
     const description = body.description || 'Emergency alert triggered by citizen';
     const latitude = body.latitude ? parseFloat(body.latitude) : null;
     const longitude = body.longitude ? parseFloat(body.longitude) : null;
-    const location_address = body.location_address || 'Location coordinates provided';
-    const state = body.state || 'Tamil Nadu';
-    const district = body.district || 'Chennai';
-    const city = body.city || 'Chennai';
+    // P3 fix: Never default to Chennai. Store explicit GPS availability flag.
+    const gps_available = (latitude !== null && longitude !== null) ? 1 : 0;
+    const location_address = body.location_address
+      ? body.location_address
+      : (gps_available ? `GPS: ${latitude}, ${longitude}` : 'GPS location unavailable');
+    const state = body.state || null;
+    const district = body.district || null;
+    const city = body.city || null;
     const user = (req as any).user;
     const citizen_name = body.citizen_name || user?.name || 'Anonymous Citizen';
     const citizen_phone = body.citizen_phone || user?.phone || null;
     const user_id = user?.id || body.user_id || null;
     const user_email = user?.email ? user.email.toLowerCase() : (body.user_email ? body.user_email.toLowerCase() : null);
+    const audio_duration = body.audio_duration ? parseFloat(body.audio_duration) : null;
+    const nowIso = new Date().toISOString();
 
     const initialTimeline = JSON.stringify([
       {
-        status: 'INCIDENT_REPORTED',
-        timestamp: new Date().toISOString(),
-        note: 'Emergency SOS reported by citizen via Web Portal'
+        status: 'ALERT_RECEIVED',
+        timestamp: nowIso,
+        note: 'Emergency SOS received by Police Command System'
       }
     ]);
 
     const stmt = db.prepare(`
       INSERT INTO emergency_reports (
         report_code, incident_type, severity, description,
-        photo_url, audio_url, latitude, longitude, location_address,
+        photo_url, audio_url, audio_duration, latitude, longitude, location_address,
         state, district, city, citizen_name, citizen_phone,
-        user_id, user_email,
+        user_id, user_email, gps_available,
         status, reported_at, status_timeline, created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        ?, ?,
-        'INCIDENT_REPORTED', CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ?, ?, ?,
+        'ALERT_RECEIVED', ?, ?, ?, ?
       )
     `);
 
     stmt.run(
       report_code, incident_type, severity, description,
-      photo_url, audio_url, latitude, longitude, location_address,
+      photo_url, audio_url, audio_duration, latitude, longitude, location_address,
       state, district, city, citizen_name, citizen_phone,
-      user_id, user_email,
-      initialTimeline
+      user_id, user_email, gps_available,
+      nowIso, initialTimeline, nowIso, nowIso
     );
 
     logIncidentAudit(
@@ -309,16 +344,21 @@ export async function createReport(req: Request, res: Response) {
 
     const newReport = db.prepare('SELECT * FROM emergency_reports WHERE report_code = ?').get(report_code);
 
-    // Sync to Supabase
-    syncEmergencyReportToSupabase(newReport);
-
-    broadcastEmergencyEvent('NEW_EMERGENCY', newReport);
+    // P4 fix: include unique event ID for client deduplication
+    broadcastEmergencyEvent('NEW_EMERGENCY', { ...(newReport as object), _eventId: `${report_code}_${Date.now()}` });
 
     // Trigger Automatic Nearest Police Station & Patrol Dispatch
     const dispatchResult = autoDispatchNearestPatrol(report_code, latitude, longitude);
 
     const finalReport: any = db.prepare('SELECT * FROM emergency_reports WHERE report_code = ?').get(report_code);
     const finalAssignment: any = db.prepare('SELECT * FROM patrol_assignments WHERE report_code = ? ORDER BY assigned_at DESC LIMIT 1').get(report_code);
+
+    // Safely await Supabase emergency report synchronization
+    try {
+      await syncEmergencyReportToSupabase(finalReport);
+    } catch (syncErr: any) {
+      console.error(`[Supabase Sync] Cloud sync notice for report ${report_code}:`, syncErr?.message);
+    }
 
     res.status(201).json({
       success: true,
@@ -338,11 +378,41 @@ export async function createReport(req: Request, res: Response) {
 }
 
 /**
+ * Delete media (photo or audio) from a specific emergency report
+ */
+export async function deleteReportMedia(req: Request, res: Response) {
+  try {
+    const { code, mediaType } = req.params;
+    if (!code || !mediaType || !['photo', 'audio'].includes(mediaType)) {
+      return res.status(400).json({ success: false, error: 'Invalid report code or media type. Must be "photo" or "audio".' });
+    }
+
+    const existing: any = db.prepare('SELECT * FROM emergency_reports WHERE report_code = ?').get(code);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: `Report ${code} not found` });
+    }
+
+    const field = mediaType === 'photo' ? 'photo_url' : 'audio_url';
+    db.prepare(`UPDATE emergency_reports SET ${field} = NULL, updated_at = CURRENT_TIMESTAMP WHERE report_code = ?`).run(code);
+
+    const updated: any = db.prepare('SELECT * FROM emergency_reports WHERE report_code = ?').get(code);
+    try { await syncEmergencyReportToSupabase(updated); } catch (_) {}
+
+    logIncidentAudit(code, null, 'Officer', `${mediaType.toUpperCase()}_DELETED`, null, null, `Evidence ${mediaType} removed from report ${code}`);
+
+    return res.json({ success: true, message: `${mediaType} evidence deleted from report ${code}`, report: updated });
+  } catch (error: any) {
+    console.error('Error deleting report media:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+/**
  * Get All Emergency Reports with optional filters & smart escalation check
  */
 export function getReports(req: Request, res: Response) {
   try {
-    const { status, severity, limit = '50', offset = '0', threshold_minutes = '5' } = req.query;
+    const { status, severity, district, search, limit = '100', offset = '0', threshold_minutes = '5' } = req.query;
 
     // Run auto escalation check for delayed patrols
     runSmartEscalationCheck(parseInt(threshold_minutes as string, 10) || 5);
@@ -350,14 +420,52 @@ export function getReports(req: Request, res: Response) {
     let query = 'SELECT * FROM emergency_reports WHERE 1=1';
     const params: any[] = [];
 
-    if (status && status !== 'ALL') {
-      query += ' AND status = ?';
-      params.push(status);
+    // Search filter across multiple columns
+    if (search && typeof search === 'string' && search.trim() !== '') {
+      const term = `%${search.trim().toLowerCase()}%`;
+      query += ` AND (
+        LOWER(report_code) LIKE ? OR
+        LOWER(incident_type) LIKE ? OR
+        LOWER(COALESCE(location_address, '')) LIKE ? OR
+        LOWER(COALESCE(citizen_name, '')) LIKE ? OR
+        LOWER(COALESCE(description, '')) LIKE ? OR
+        LOWER(COALESCE(city, '')) LIKE ? OR
+        LOWER(COALESCE(district, '')) LIKE ?
+      )`;
+      params.push(term, term, term, term, term, term, term);
     }
 
+    // District filter
+    if (district && typeof district === 'string' && district !== 'ALL' && district.trim() !== '') {
+      query += ' AND (district = ? OR city = ? OR state = ?)';
+      params.push(district, district, district);
+    }
+
+    // Status filter with smart alias support
+    if (status && status !== 'ALL') {
+      const s = String(status).toUpperCase();
+      if (s === 'CRITICAL') {
+        query += " AND severity = 'CRITICAL' AND status NOT IN ('RESOLVED', 'CLOSED')";
+      } else if (s === 'INVESTIGATING' || s === 'UNDER_REVIEW' || s === 'REVIEWING') {
+        query += " AND status IN ('INVESTIGATING', 'UNDER_REVIEW', 'POLICE_VERIFICATION', 'REVIEWING', 'VIEWED', 'ACKNOWLEDGED')";
+      } else if (s === 'PATROL_ASSIGNED' || s === 'DISPATCHED' || s === 'OFFICER_ASSIGNED') {
+        query += " AND status IN ('PATROL_ASSIGNED', 'OFFICER_ASSIGNED', 'RESPONDING', 'PATROL_EN_ROUTE', 'ARRIVED', 'PATROL_ARRIVED', 'EN_ROUTE')";
+      } else if (s === 'RESPONDING' || s === 'EN_ROUTE' || s === 'PATROL_EN_ROUTE') {
+        query += " AND status IN ('RESPONDING', 'PATROL_EN_ROUTE', 'EN_ROUTE', 'ARRIVED', 'PATROL_ARRIVED')";
+      } else if (s === 'ALERT_RECEIVED' || s === 'RECEIVED' || s === 'NEW') {
+        query += " AND status IN ('ALERT_RECEIVED', 'RECEIVED', 'INCIDENT_REPORTED', 'NEW', 'SUBMITTED')";
+      } else if (s === 'RESOLVED' || s === 'CLOSED') {
+        query += " AND status IN ('RESOLVED', 'CLOSED')";
+      } else {
+        query += ' AND status = ?';
+        params.push(status);
+      }
+    }
+
+    // Severity filter
     if (severity && severity !== 'ALL') {
       query += ' AND severity = ?';
-      params.push(severity);
+      params.push(String(severity).toUpperCase());
     }
 
     query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
@@ -394,7 +502,10 @@ export function getReports(req: Request, res: Response) {
 
     res.json({
       success: true,
+      count: enriched.length,
+      total: stats.total_incidents,
       reports: enriched,
+      incidents: enriched,
       stats
     });
   } catch (error: any) {
@@ -456,26 +567,41 @@ export function getReportByCode(req: Request, res: Response) {
  */
 export function updateReportStatus(req: Request, res: Response) {
   try {
+    const user = (req as any).user;
+    if (user && user.role === 'user') {
+      return res.status(403).json({ success: false, error: 'Access denied: Only authorized Police officers can change incident status.' });
+    }
+
     const { code } = req.params;
     const { status, note, officer_name, user_id } = req.body;
 
     const validStatuses = [
+      'ALERT_RECEIVED',
+      'RECEIVED',
+      'VIEWED',
+      'VIEWED_BY_OFFICER',
+      'ACKNOWLEDGED',
+      'REVIEWING',
+      'PATROL_ASSIGNED',
+      'OFFICER_ASSIGNED',
+      'RESPONDING',
+      'PATROL_EN_ROUTE',
+      'EN_ROUTE',
+      'ARRIVED',
+      'PATROL_ARRIVED',
+      'RESOLVED',
+      'CLOSED',
+      'CANCELLED',
       'INCIDENT_REPORTED',
       'POLICE_VERIFICATION',
       'PRIORITY_ASSIGNED',
-      'PATROL_ASSIGNED',
-      'PATROL_EN_ROUTE',
-      'PATROL_ARRIVED',
       'EVIDENCE_COLLECTED',
       'OFFICER_REPORT_SUBMITTED',
       'INVESTIGATION',
-      'RESOLVED',
+      'INVESTIGATING',
+      'UNDER_REVIEW',
       'ESCALATED',
-      'RESPONSE_DELAY',
-      // Legacy backwards compatibility
-      'RECEIVED',
-      'REVIEWING',
-      'RESPONDING'
+      'RESPONSE_DELAY'
     ];
 
     if (!validStatuses.includes(status)) {
@@ -502,19 +628,28 @@ export function updateReportStatus(req: Request, res: Response) {
 
     // Map column updates for timestamps based on milestone status
     const columnMap: Record<string, string> = {
+      'ALERT_RECEIVED': 'reported_at',
       'INCIDENT_REPORTED': 'reported_at',
       'RECEIVED': 'reported_at',
-      'POLICE_VERIFICATION': 'verified_at',
+      'VIEWED': 'viewed_at',
+      'VIEWED_BY_OFFICER': 'viewed_at',
+      'ACKNOWLEDGED': 'acknowledged_at',
       'REVIEWING': 'verified_at',
-      'PRIORITY_ASSIGNED': 'priority_assigned_at',
+      'POLICE_VERIFICATION': 'verified_at',
       'PATROL_ASSIGNED': 'patrol_assigned_at',
-      'PATROL_EN_ROUTE': 'en_route_at',
+      'OFFICER_ASSIGNED': 'patrol_assigned_at',
+      'PRIORITY_ASSIGNED': 'priority_assigned_at',
       'RESPONDING': 'en_route_at',
+      'PATROL_EN_ROUTE': 'en_route_at',
+      'EN_ROUTE': 'en_route_at',
+      'ARRIVED': 'arrived_at',
       'PATROL_ARRIVED': 'arrived_at',
       'EVIDENCE_COLLECTED': 'evidence_collected_at',
       'OFFICER_REPORT_SUBMITTED': 'officer_report_submitted_at',
       'INVESTIGATION': 'investigation_at',
+      'INVESTIGATING': 'investigation_at',
       'RESOLVED': 'resolved_at',
+      'CLOSED': 'resolved_at',
       'ESCALATED': 'escalated_at',
       'RESPONSE_DELAY': 'delay_flagged_at'
     };
@@ -580,6 +715,11 @@ export function updateReportStatus(req: Request, res: Response) {
  */
 export function assignPatrol(req: Request, res: Response) {
   try {
+    const user = (req as any).user;
+    if (user && user.role === 'user') {
+      return res.status(403).json({ success: false, error: 'Access denied: Only authorized Police officers can assign patrol units.' });
+    }
+
     const { code } = req.params;
     const { unit_name, vehicle_type, officer_in_charge, contact_number, eta_minutes, dispatch_notes } = req.body;
 
@@ -962,11 +1102,18 @@ function getEmergencyStatsHelper() {
 
   return {
     total_emergencies: total?.count || 0,
+    total_incidents: total?.count || 0,
     critical_active: critical?.count || 0,
+    critical_count: critical?.count || 0,
     active_incidents: active?.count || 0,
+    under_investigation: active?.count || 0,
+    investigating_count: active?.count || 0,
     patrols_responding: responding?.count || 0,
+    patrols_dispatched: responding?.count || 0,
+    dispatched_count: responding?.count || 0,
     delayed_incidents: delayed?.count || 0,
     resolved_count: resolved?.count || 0,
+    resolved_incidents: resolved?.count || 0,
     escalated_count: escalated?.count || 0,
     backup_requests_count: backups?.count || 0,
     avg_response_time_minutes: avgResponse?.avg_mins ? Math.round(avgResponse.avg_mins * 10) / 10 : 4.5,
@@ -979,7 +1126,7 @@ function getEmergencyStatsHelper() {
  */
 export function getAllPoliceStations(req: Request, res: Response) {
   try {
-    const stations: any[] = db.prepare('SELECT * FROM police_stations WHERE status = "ACTIVE" ORDER BY state, city, name').all();
+    const stations: any[] = db.prepare("SELECT * FROM police_stations WHERE status = 'ACTIVE' ORDER BY state, city, name").all();
     const enriched = stations.map(st => {
       const patrols = db.prepare('SELECT * FROM patrol_units WHERE station_id = ?').all(st.id);
       const availableCount = patrols.filter((p: any) => p.status === 'AVAILABLE').length;
@@ -1014,7 +1161,7 @@ export function getNearestPoliceStation(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: 'Invalid latitude or longitude' });
     }
 
-    const stations: any[] = db.prepare('SELECT * FROM police_stations WHERE status = "ACTIVE"').all();
+    const stations: any[] = db.prepare("SELECT * FROM police_stations WHERE status = 'ACTIVE'").all();
 
     const ranked = stations
       .map(st => {
@@ -1052,7 +1199,8 @@ export function getNearestPoliceStation(req: Request, res: Response) {
  */
 export function updatePatrolLifecycleStatus(req: Request, res: Response) {
   try {
-    const { report_code, patrol_id, status: newStatus } = req.body;
+    const report_code = req.body.report_code || req.params.code;
+    const { patrol_id, status: newStatus } = req.body;
 
     if (!report_code || !newStatus) {
       return res.status(400).json({ success: false, error: 'Report code and status are required' });
@@ -1353,6 +1501,169 @@ export function getMyReports(req: Request, res: Response) {
     });
   } catch (error: any) {
     console.error('Error fetching user reports:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+
+/**
+ * P4: Get unread emergency count for the requesting officer
+ * Officer identity keyed by Authorization header (token) or query param officer_id.
+ * Falls back to anonymous count using all ALERT_RECEIVED records not in emergency_reads.
+ */
+export function getUnreadCount(req: Request, res: Response) {
+  try {
+    // SECURITY: Always derive officer identity from the authenticated token.
+    // Never trust a client-supplied officer_id query param.
+    const officerId = (req as any).user?.id;
+    if (!officerId) {
+      // No authenticated session — return 0 gracefully (not an error, just no data)
+      return res.json({ success: true, unreadCount: 0, officerId: null });
+    }
+    const unread: any = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM emergency_reports
+      WHERE status IN ('RECEIVED', 'ALERT_RECEIVED', 'INCIDENT_REPORTED')
+        AND report_code NOT IN (
+          SELECT report_code FROM emergency_reads WHERE officer_id = ?
+        )
+    `).get(officerId);
+    res.json({ success: true, unreadCount: unread?.count || 0, officerId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+/**
+ * P4: Mark an incident as read by this officer (removes from unread badge count)
+ */
+export function markReportRead(req: Request, res: Response) {
+  try {
+    const { code } = req.params;
+    // SECURITY: Always derive officer identity from the authenticated token.
+    // Never trust a client-supplied officer_id query param.
+    const officerId = (req as any).user?.id;
+    if (!officerId) {
+      return res.json({ success: true, unreadCount: 0, markedCode: code });
+    }
+    db.prepare(`
+      INSERT OR IGNORE INTO emergency_reads (report_code, officer_id)
+      VALUES (?, ?)
+    `).run(code, officerId);
+
+    const unread: any = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM emergency_reports
+      WHERE status IN ('RECEIVED', 'ALERT_RECEIVED', 'INCIDENT_REPORTED')
+        AND report_code NOT IN (
+          SELECT report_code FROM emergency_reads WHERE officer_id = ?
+        )
+    `).get(officerId);
+
+    res.json({ success: true, unreadCount: unread?.count || 0, markedCode: code });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+/**
+ * Mark an emergency report as VIEWED by Police Officer in Command Hub
+ * Appends 'VIEWED_BY_OFFICER' to status_timeline and broadcasts live SSE update to citizen.
+ */
+export function markReportViewed(req: Request, res: Response) {
+  try {
+    const { code } = req.params;
+    const user = (req as any).user;
+    const officerId = user?.id || 'POLICE_OFFICER';
+    const officerName = user?.name || 'Command Officer';
+
+    if (officerId) {
+      db.prepare(`
+        INSERT OR IGNORE INTO emergency_reads (report_code, officer_id)
+        VALUES (?, ?)
+      `).run(code, officerId);
+    }
+
+    const report: any = db.prepare('SELECT * FROM emergency_reports WHERE report_code = ? OR id = ?').get(code, code);
+    if (!report) {
+      return res.status(404).json({ success: false, error: 'Emergency report not found' });
+    }
+
+    let timeline: any[] = [];
+    try {
+      timeline = report.status_timeline ? JSON.parse(report.status_timeline) : [];
+    } catch {
+      timeline = [];
+    }
+
+    const alreadyHasViewed = timeline.some((t: any) => t.status === 'VIEWED' || t.status === 'VIEWED_BY_OFFICER');
+    const nowIso = new Date().toISOString();
+
+    if (!alreadyHasViewed) {
+      timeline.push({
+        status: 'VIEWED_BY_OFFICER',
+        timestamp: nowIso,
+        note: `Incident dossier viewed and opened by Police Officer (${officerName})`
+      });
+
+      db.prepare(`
+        UPDATE emergency_reports
+        SET viewed_at = COALESCE(viewed_at, CURRENT_TIMESTAMP),
+            status_timeline = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE report_code = ?
+      `).run(JSON.stringify(timeline), report.report_code);
+
+      logIncidentAudit(
+        report.report_code,
+        user?.id || null,
+        officerName,
+        'REPORT_VIEWED',
+        report.status,
+        report.status,
+        `Emergency report dossier opened and reviewed by ${officerName}`
+      );
+    }
+
+    const updated: any = db.prepare('SELECT * FROM emergency_reports WHERE report_code = ?').get(report.report_code);
+    const assignment = db.prepare('SELECT * FROM patrol_assignments WHERE report_code = ? ORDER BY assigned_at DESC LIMIT 1').get(report.report_code);
+    const backups = db.prepare('SELECT * FROM backup_requests WHERE report_code = ? ORDER BY created_at DESC').all(report.report_code);
+
+    const fullReport = {
+      ...updated,
+      patrol_assignment: assignment || null,
+      backup_requests: backups || [],
+      status_timeline: timeline
+    };
+
+    if (!alreadyHasViewed) {
+      syncEmergencyReportToSupabase(fullReport);
+      broadcastEmergencyEvent('STATUS_UPDATE', fullReport);
+    }
+
+    res.json({
+      success: true,
+      message: 'Report marked as viewed by officer',
+      report: fullReport
+    });
+  } catch (error: any) {
+    console.error('Error marking report as viewed:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+/**
+ * Get Emergency Statistics for Police Command Hub
+ */
+export function getStats(req: Request, res: Response) {
+  try {
+    const stats = getEmergencyStatsHelper();
+    res.json({
+      success: true,
+      stats
+    });
+  } catch (error: any) {
+    console.error('Error fetching emergency stats:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 }
