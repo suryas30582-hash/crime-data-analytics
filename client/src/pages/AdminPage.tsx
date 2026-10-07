@@ -253,14 +253,14 @@ export const AdminPage: React.FC = () => {
         <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFFDFC] p-4 shadow-warm-xs space-y-1">
           <span className="text-[11px] font-semibold text-[#7A6360]">Total Incidents</span>
           <p className="text-2xl font-bold text-[#D65A31]">{incidents.length}</p>
-          <span className="text-[10px] text-[#7A6360]">Logged in MongoDB</span>
+          <span className="text-[10px] text-[#7A6360]">Logged in Supabase</span>
         </div>
 
         <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFFDFC] p-4 shadow-warm-xs space-y-1">
           <span className="text-[11px] font-semibold text-[#7A6360]">Database Architecture</span>
           <p className="text-sm font-bold text-[#2E7D32] flex items-center space-x-1.5 pt-1">
             <span className="h-2 w-2 rounded-full bg-[#2E7D32]"></span>
-            <span>MongoDB + SQLite WAL</span>
+            <span>Supabase + SQLite WAL</span>
           </p>
           <span className="text-[10px] text-[#7A6360]">Hybrid Persistent Storage</span>
         </div>
@@ -410,7 +410,7 @@ export const AdminPage: React.FC = () => {
         <div className="rounded-3xl border border-[#EEDFD9] bg-[#FFFDFC] p-6 shadow-warm-xs space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-[#2B1F1D]">All Incident Reports Across System</h2>
-            <span className="text-xs text-[#7A6360]">Stored in MongoDB</span>
+            <span className="text-xs text-[#7A6360]">Stored in Supabase</span>
           </div>
 
           <div className="space-y-3">
@@ -431,7 +431,9 @@ export const AdminPage: React.FC = () => {
                     {inc.status}
                   </span>
                 </div>
+
                 <p className="text-[11px] text-[#2B1F1D]">{inc.description}</p>
+
                 <div className="text-[10px] text-[#7A6360] flex items-center space-x-3">
                   <span>Citizen: {inc.citizen_name || 'Anonymous'}</span>
                   <span>•</span>
@@ -439,6 +441,51 @@ export const AdminPage: React.FC = () => {
                   <span>•</span>
                   <span>{new Date(inc.created_at || inc.createdAt).toLocaleString()}</span>
                 </div>
+
+                {/* Evidence: Image / Audio / GPS */}
+                {(inc.image_url || inc.audio_url || inc.latitude) && (
+                  <div className="pt-2 border-t border-[#EEDFD9] flex flex-wrap gap-3">
+                    {inc.image_url && (
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-[#542A20] uppercase">📷 Image Evidence</span>
+                        <a href={inc.image_url} target="_blank" rel="noopener noreferrer">
+                          <img
+                            src={inc.image_url}
+                            alt="Incident evidence"
+                            className="h-20 w-32 object-cover rounded-xl border border-[#EEDFD9] cursor-pointer hover:opacity-90 transition-opacity"
+                          />
+                        </a>
+                      </div>
+                    )}
+                    {inc.audio_url && (
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-[#542A20] uppercase">🎙️ Voice Recording</span>
+                        <audio
+                          controls
+                          src={inc.audio_url}
+                          className="h-8 w-48 rounded-lg"
+                        />
+                      </div>
+                    )}
+                    {inc.latitude && inc.longitude && (
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-[#542A20] uppercase">📍 GPS Location</span>
+                        <a
+                          href={`https://www.google.com/maps?q=${inc.latitude},${inc.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center space-x-1 text-[#883A2E] underline underline-offset-2 hover:text-[#542A20]"
+                        >
+                          <span>{Number(inc.latitude).toFixed(5)}, {Number(inc.longitude).toFixed(5)}</span>
+                          <span className="text-[9px]">(Open Maps)</span>
+                        </a>
+                        {inc.location_address && (
+                          <p className="text-[10px] text-[#7A6360]">{inc.location_address}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>

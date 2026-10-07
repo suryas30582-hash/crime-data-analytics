@@ -19,6 +19,8 @@ import {
   Search,
   Filter,
   Volume2,
+  VolumeX,
+  Bell,
   ChevronRight,
   ExternalLink,
   ShieldAlert,
@@ -28,6 +30,9 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { EmergencyReport, EmergencyStats, PatrolAssignment } from '../types';
+import { formatISTDateTime } from '../utils/dateFormatter';
+import { emergencyAlarm } from '../utils/emergencyAlarm';
+import { IncidentAudioPlayer } from '../components/common/IncidentAudioPlayer';
 
 export const PoliceEmergencyPage: React.FC = () => {
   const location = useLocation();
@@ -72,107 +77,59 @@ export const PoliceEmergencyPage: React.FC = () => {
   const [playingAudioUrl, setPlayingAudioUrl] = useState<string | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
-  // Alarm & Real-time Alert System
-  const [isAlertAudioEnabled, setIsAlertAudioEnabled] = useState(false);
+  // Real-time Alarm & Automatic Siren State
+  const [isAlarmPlaying, setIsAlarmPlaying] = useState<boolean>(emergencyAlarm.getIsPlaying());
+  const [isAutoplayBlocked, setIsAutoplayBlocked] = useState<boolean>(emergencyAlarm.getIsAutoplayBlocked());
   const [unacknowledgedReports, setUnacknowledgedReports] = useState<EmergencyReport[]>([]);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const alarmIntervalRef = useRef<any>(null);
   const notifiedCodesRef = useRef<Set<string>>(new Set());
+  const acknowledgedCodesRef = useRef<Set<string>>(new Set());
+  const initialLoadCompletedRef = useRef<boolean>(false);
 
-  // Initialize or resume Web Audio API Context
-  const enableAlertAudio = () => {
-    try {
-      if (!audioCtxRef.current) {
-        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      if (audioCtxRef.current.state === 'suspended') {
-        audioCtxRef.current.resume();
-      }
-      setIsAlertAudioEnabled(true);
-      // Play brief test beep
-      triggerSingleAlarmBeep();
-    } catch (e) {
-      console.warn('Audio Context unlock warning:', e);
-    }
-  };
-
-  // Play a single alarm pulse (Alarm -> short silence pattern)
-  const triggerSingleAlarmBeep = () => {
-    try {
-      if (!audioCtxRef.current) {
-        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      const ctx = audioCtxRef.current;
-      if (ctx.state === 'suspended') {
-        ctx.resume();
-      }
-
-      const now = ctx.currentTime;
-      // Pulse 1 (Alarm)
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = 'sawtooth';
-      osc1.frequency.setValueAtTime(880, now);
-      osc1.frequency.setValueAtTime(660, now + 0.15);
-      gain1.gain.setValueAtTime(0.3, now);
-      gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start(now);
-      osc1.stop(now + 0.3);
-
-      // Pulse 2 after short silence (0.2s gap)
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = 'sawtooth';
-      osc2.frequency.setValueAtTime(880, now + 0.5);
-      osc2.frequency.setValueAtTime(1100, now + 0.65);
-      gain2.gain.setValueAtTime(0.35, now + 0.5);
-      gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.8);
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start(now + 0.5);
-      osc2.stop(now + 0.8);
-    } catch {
-      // AudioContext policy
-    }
-  };
-
-  // Continuous Alarm Loop when unacknowledged reports exist
+  // Subscribe to emergencyAlarm state changes
   useEffect(() => {
-    if (unacknowledgedReports.length > 0 && isAlertAudioEnabled) {
-      if (!alarmIntervalRef.current) {
-        alarmIntervalRef.current = setInterval(() => {
-          triggerSingleAlarmBeep();
-        }, 1400);
-      }
-    } else {
-      if (alarmIntervalRef.current) {
-        clearInterval(alarmIntervalRef.current);
-        alarmIntervalRef.current = null;
-      }
-    }
+    const unsubscribe = emergencyAlarm.subscribe(() => {
+      setIsAlarmPlaying(emergencyAlarm.getIsPlaying());
+      setIsAutoplayBlocked(emergencyAlarm.getIsAutoplayBlocked());
+    });
     return () => {
-      if (alarmIntervalRef.current) {
-        clearInterval(alarmIntervalRef.current);
-        alarmIntervalRef.current = null;
-      }
+      unsubscribe();
+      emergencyAlarm.stopAlarm();
     };
-  }, [unacknowledgedReports.length, isAlertAudioEnabled]);
+  }, []);
+
+  // Stop alarm if all unacknowledged reports are cleared
+  useEffect(() => {
+    if (unacknowledgedReports.length === 0 && isAlarmPlaying) {
+      emergencyAlarm.stopAlarm();
+    }
+  }, [unacknowledgedReports.length, isAlarmPlaying]);
 
   // Acknowledge single emergency report
   const acknowledgeReportAlert = (reportCode: string) => {
-    setUnacknowledgedReports((prev) => prev.filter((r) => r.report_code !== reportCode));
-    // Also transition status in backend to REVIEWING if currently RECEIVED
+    acknowledgedCodesRef.current.add(reportCode);
+    setUnacknowledgedReports((prev) => {
+      const next = prev.filter((r) => r.report_code !== reportCode);
+      if (next.length === 0) {
+        emergencyAlarm.stopAlarm();
+      }
+      return next;
+    });
     handleStatusChange(reportCode, 'REVIEWING');
   };
 
   // Acknowledge all active alerts
   const acknowledgeAllAlerts = () => {
     unacknowledgedReports.forEach((r) => {
+      acknowledgedCodesRef.current.add(r.report_code);
       handleStatusChange(r.report_code, 'REVIEWING');
     });
     setUnacknowledgedReports([]);
+    emergencyAlarm.stopAlarm();
+  };
+
+  // Silence alarm sound only
+  const stopAlarmSoundOnly = () => {
+    emergencyAlarm.stopAlarm();
   };
 
   // Load Reports
@@ -187,9 +144,13 @@ export const PoliceEmergencyPage: React.FC = () => {
         setReports(res.reports);
         setStats(res.stats);
 
-        // Track unacknowledged reports (status === RECEIVED)
-        const received = res.reports.filter((r: EmergencyReport) => r.status === 'RECEIVED');
-        setUnacknowledgedReports(received);
+        // Populate known reports on initial load so old reports DO NOT trigger alarm on reload
+        if (!initialLoadCompletedRef.current) {
+          res.reports.forEach((r: EmergencyReport) => {
+            notifiedCodesRef.current.add(r.report_code);
+          });
+          initialLoadCompletedRef.current = true;
+        }
       }
     } catch (err) {
       console.error('Error fetching emergency reports:', err);
@@ -206,53 +167,80 @@ export const PoliceEmergencyPage: React.FC = () => {
   // Connect to SSE Stream for Live Emergency Feed
   useEffect(() => {
     let eventSource: EventSource | null = null;
-    try {
-      const streamUrl = api.getEmergencyStreamUrl();
-      eventSource = new EventSource(streamUrl);
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryDelay = 2000;
+    let destroyed = false;
 
-      eventSource.addEventListener('NEW_EMERGENCY', (event) => {
-        try {
-          const newReport: EmergencyReport = JSON.parse(event.data);
-          
-          if (!notifiedCodesRef.current.has(newReport.report_code)) {
-            notifiedCodesRef.current.add(newReport.report_code);
-            setUnacknowledgedReports((prev) => [newReport, ...prev.filter(r => r.report_code !== newReport.report_code)]);
-            triggerSingleAlarmBeep();
+    function connectSSE() {
+      if (destroyed) return;
+      try {
+        const streamUrl = api.getEmergencyStreamUrl();
+        eventSource = new EventSource(streamUrl);
+
+        eventSource.addEventListener('NEW_EMERGENCY', (event) => {
+          try {
+            const newReport: EmergencyReport = JSON.parse(event.data);
+
+            if (!notifiedCodesRef.current.has(newReport.report_code) && !acknowledgedCodesRef.current.has(newReport.report_code)) {
+              notifiedCodesRef.current.add(newReport.report_code);
+              setUnacknowledgedReports((prev) => [newReport, ...prev.filter(r => r.report_code !== newReport.report_code)]);
+              emergencyAlarm.startAlarm(newReport.report_code);
+            }
+
+            setReports((prev) => [newReport, ...prev.filter(r => r.report_code !== newReport.report_code)]);
+            setStats((prev) => prev ? { ...prev, total_emergencies: prev.total_emergencies + 1, active_incidents: prev.active_incidents + 1 } : null);
+          } catch (e) {
+            console.error('Failed to parse SSE new emergency:', e);
           }
+        });
 
-          setReports((prev) => [newReport, ...prev.filter(r => r.report_code !== newReport.report_code)]);
-          setStats((prev) => prev ? { ...prev, total_emergencies: prev.total_emergencies + 1, active_incidents: prev.active_incidents + 1 } : null);
-        } catch (e) {
-          console.error('Failed to parse SSE new emergency:', e);
-        }
-      });
+        eventSource.addEventListener('STATUS_UPDATE', (event) => {
+          try {
+            const updated: EmergencyReport = JSON.parse(event.data);
+            if (updated.status !== 'RECEIVED' && updated.status !== 'INCIDENT_REPORTED') {
+              acknowledgedCodesRef.current.add(updated.report_code);
+              setUnacknowledgedReports((prev) => prev.filter(r => r.report_code !== updated.report_code));
+            }
+            setReports((prev) => prev.map(r => r.report_code === updated.report_code ? updated : r));
+          } catch (e) {
+            console.error('Failed to parse status update event:', e);
+          }
+        });
 
-      eventSource.addEventListener('STATUS_UPDATE', (event) => {
-        try {
-          const updated: EmergencyReport = JSON.parse(event.data);
-          if (updated.status !== 'RECEIVED') {
+        eventSource.addEventListener('PATROL_ASSIGNED', (event) => {
+          try {
+            const updated: EmergencyReport = JSON.parse(event.data);
+            acknowledgedCodesRef.current.add(updated.report_code);
             setUnacknowledgedReports((prev) => prev.filter(r => r.report_code !== updated.report_code));
+            setReports((prev) => prev.map(r => r.report_code === updated.report_code ? updated : r));
+          } catch (e) {
+            console.error('Failed to parse patrol assigned event:', e);
           }
-          setReports((prev) => prev.map(r => r.report_code === updated.report_code ? updated : r));
-        } catch (e) {
-          console.error('Failed to parse status update event:', e);
-        }
-      });
+        });
 
-      eventSource.addEventListener('PATROL_ASSIGNED', (event) => {
-        try {
-          const updated: EmergencyReport = JSON.parse(event.data);
-          setUnacknowledgedReports((prev) => prev.filter(r => r.report_code !== updated.report_code));
-          setReports((prev) => prev.map(r => r.report_code === updated.report_code ? updated : r));
-        } catch (e) {
-          console.error('Failed to parse patrol assigned event:', e);
-        }
-      });
-    } catch (err) {
-      console.error('SSE connection error:', err);
+        // Reset backoff on successful open
+        eventSource.onopen = () => { retryDelay = 2000; };
+
+        eventSource.onerror = () => {
+          eventSource?.close();
+          eventSource = null;
+          if (!destroyed) {
+            reconnectTimer = setTimeout(() => {
+              retryDelay = Math.min(retryDelay * 2, 30000);
+              connectSSE();
+            }, retryDelay);
+          }
+        };
+      } catch (err) {
+        console.error('SSE connection error:', err);
+      }
     }
 
+    connectSSE();
+
     return () => {
+      destroyed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (eventSource) eventSource.close();
     };
   }, []);
@@ -427,17 +415,31 @@ export const PoliceEmergencyPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
-          <button
-            onClick={enableAlertAudio}
-            className={`flex items-center space-x-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold transition-all cursor-pointer ${
-              isAlertAudioEnabled
-                ? 'border-[#2E7D32]/40 bg-[#2E7D32]/30 text-white'
-                : 'border-[#D65A31] bg-[#D65A31] text-white animate-pulse'
-            }`}
-          >
-            <Volume2 className="h-4 w-4" />
-            <span>{isAlertAudioEnabled ? '🔔 Alarm Audio Active' : '⚡ Enable Emergency Alert Audio'}</span>
-          </button>
+          {/* Automatic Real-Time Alarm Status Indicator / Quick Mute */}
+          {isAlarmPlaying ? (
+            <button
+              onClick={stopAlarmSoundOnly}
+              className="flex items-center space-x-1.5 rounded-xl border-2 border-white bg-red-600 px-3.5 py-2 text-xs font-black text-white animate-bounce shadow-lg shadow-red-600/50 cursor-pointer"
+              title="Alarm is sounding! Click to stop alarm sound."
+            >
+              <VolumeX className="h-4 w-4" />
+              <span>🔊 ALARM SOUNDING – Stop Alarm</span>
+            </button>
+          ) : isAutoplayBlocked ? (
+            <button
+              onClick={() => emergencyAlarm.playSinglePulse()}
+              className="flex items-center space-x-1.5 rounded-xl border border-amber-300 bg-amber-500/20 px-3.5 py-2 text-xs font-bold text-amber-200 cursor-pointer animate-pulse"
+              title="Browser autoplay policy requires a click to enable sound. Click here to enable."
+            >
+              <Volume2 className="h-4 w-4" />
+              <span>⚠️ Enable Audio Autoplay</span>
+            </button>
+          ) : (
+            <div className="flex items-center space-x-1.5 rounded-xl border border-[#2E7D32]/40 bg-[#2E7D32]/25 px-3.5 py-2 text-xs font-bold text-white shadow-xs">
+              <Volume2 className="h-4 w-4 text-[#4ade80]" />
+              <span>🔔 Auto-Alarm Armed</span>
+            </div>
+          )}
 
           <button
             onClick={loadReports}
@@ -459,36 +461,55 @@ export const PoliceEmergencyPage: React.FC = () => {
         </div>
       </div>
 
-      {/* NEW EMERGENCY REPORT PROMINENT VISUAL ALERT BANNER */}
+      {/* NEW EMERGENCY ALERT PROMINENT VISUAL BANNER */}
       {unacknowledgedReports.length > 0 && (
-        <div className="rounded-2xl border-2 border-[#D65A31] bg-gradient-to-r from-[#883A2E] via-[#D65A31] to-[#883A2E] p-4 text-white shadow-xl animate-in zoom-in-95 duration-200">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-            <div className="flex items-center space-x-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#883A2E] shadow-md animate-bounce">
-                <AlertTriangle className="h-6 w-6 text-[#D65A31]" />
+        <div className="rounded-2xl border-2 border-red-500 bg-gradient-to-r from-[#883A2E] via-[#D65A31] to-[#883A2E] p-4 sm:p-5 text-white shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center space-x-3.5">
+              <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-red-600 shadow-xl animate-bounce">
+                <AlertTriangle className="h-6 w-6 sm:h-7 sm:w-7 text-red-600" />
               </div>
-              <div>
-                <div className="flex items-center space-x-2">
-                  <span className="bg-white text-[#883A2E] font-black px-2 py-0.5 rounded text-[10px] uppercase font-mono tracking-wider">
-                    NEW EMERGENCY REPORT ({unacknowledgedReports.length})
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="bg-red-600 text-white font-black px-2.5 py-0.5 rounded text-[10px] sm:text-[11px] uppercase font-mono tracking-wider shadow-sm animate-pulse">
+                    🚨 EMERGENCY ALERT — NEW ALERT RECEIVED ({unacknowledgedReports.length})
                   </span>
-                  <span className="text-xs font-mono text-white/90">
+                  <span className="text-xs font-mono font-bold text-white/95 bg-black/30 px-2 py-0.5 rounded">
                     {unacknowledgedReports[0].report_code}
                   </span>
+                  <span className="text-xs font-mono text-white/80">
+                    {formatISTDateTime(unacknowledgedReports[0].created_at || unacknowledgedReports[0].reported_at)}
+                  </span>
                 </div>
-                <p className="text-sm font-bold text-white mt-0.5">
-                  {unacknowledgedReports[0].incident_type} — {unacknowledgedReports[0].location_address || 'GPS Coordinates Logged'}
+                <p className="text-sm sm:text-base font-extrabold text-white">
+                  {unacknowledgedReports[0].incident_type} — <span className="font-normal text-white/90">{unacknowledgedReports[0].location_address || 'GPS Coordinates Logged'}</span>
                 </p>
+                {isAutoplayBlocked && (
+                  <p className="text-xs text-amber-200 bg-black/40 px-2.5 py-1 rounded-lg border border-amber-400/40 inline-block font-medium mt-1">
+                    ⚠️ Browser audio autoplay was restricted. Click "Acknowledge / Stop Alarm" or tap anywhere to allow alarm sound.
+                  </p>
+                )}
               </div>
             </div>
 
-            <div className="flex items-center space-x-2 w-full md:w-auto justify-end">
+            <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
               <button
                 onClick={() => acknowledgeReportAlert(unacknowledgedReports[0].report_code)}
-                className="rounded-xl bg-white text-[#883A2E] hover:bg-[#FAF0EC] px-4 py-2 text-xs font-black shadow-md transition-all cursor-pointer"
+                className="flex items-center space-x-1.5 rounded-xl bg-white text-[#883A2E] hover:bg-[#FAF0EC] px-4 py-2 text-xs font-black shadow-lg transition-all cursor-pointer hover:scale-105 active:scale-95"
               >
-                Acknowledge & Mute Alarm
+                <VolumeX className="h-4 w-4 text-[#883A2E]" />
+                <span>Acknowledge / Stop Alarm</span>
               </button>
+              {isAlarmPlaying && (
+                <button
+                  onClick={stopAlarmSoundOnly}
+                  className="flex items-center space-x-1 rounded-xl border border-white/50 bg-black/30 hover:bg-black/50 px-3 py-2 text-xs font-bold text-white transition-all cursor-pointer"
+                  title="Silence alarm sound without clearing alert"
+                >
+                  <VolumeX className="h-3.5 w-3.5" />
+                  <span>Stop Alarm Sound</span>
+                </button>
+              )}
               {unacknowledgedReports.length > 1 && (
                 <button
                   onClick={acknowledgeAllAlerts}
@@ -622,7 +643,7 @@ export const PoliceEmergencyPage: React.FC = () => {
                   </span>
                   <span className="text-[11px] font-medium text-[#7A6360] flex items-center gap-1">
                     <Clock className="h-3 w-3" />
-                    {new Date(report.created_at).toLocaleString()}
+                    {formatISTDateTime(report.reported_at || report.created_at)}
                   </span>
                 </div>
 
@@ -670,6 +691,11 @@ export const PoliceEmergencyPage: React.FC = () => {
                         src={api.getMediaUrl(report.photo_url)}
                         alt="Emergency Evidence"
                         className="h-36 w-full object-cover group-hover:scale-105 transition-transform"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          target.onerror = null; // prevent infinite loop
+                          target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="%237A6360" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>';
+                        }}
                       />
                       <div className="absolute top-2 right-2 flex items-center space-x-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
                         <button
@@ -699,51 +725,12 @@ export const PoliceEmergencyPage: React.FC = () => {
 
                   {/* Audio Voice Player */}
                   {report.audio_url && (
-                    <div className="rounded-xl border border-[#EEDFD9] bg-[#FAF0EC] p-2.5 flex items-center justify-between">
-                      <div className="flex items-center space-x-2 truncate pr-2">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#883A2E]/10 text-[#883A2E]">
-                          <Volume2 className="h-4 w-4" />
-                        </div>
-                        <div className="truncate">
-                          <div className="text-xs font-bold text-[#2B1F1D] truncate flex items-center gap-1.5">
-                            <span>Voice Recording</span>
-                            {report.audio_duration !== undefined && report.audio_duration !== null && (
-                              <span className="font-mono text-[10px] bg-[#883A2E]/15 text-[#883A2E] px-1.5 py-0.5 rounded font-bold">
-                                {Math.floor(Number(report.audio_duration) / 60)}:{(Math.round(Number(report.audio_duration)) % 60).toString().padStart(2, '0')}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[10px] text-[#7A6360] truncate">
-                            {report.audio_size ? `${(report.audio_size / 1024).toFixed(1)} KB audio` : 'Citizen Audio Memo'}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-1.5 shrink-0">
-                        <button
-                          onClick={() => toggleAudio(report.audio_url!)}
-                          className="flex items-center space-x-1.5 rounded-lg bg-[#883A2E] hover:bg-[#542A20] px-3 py-1.5 text-xs font-semibold text-white transition-colors cursor-pointer"
-                        >
-                          {playingAudioUrl === api.getMediaUrl(report.audio_url) ? (
-                            <>
-                              <Pause className="h-3.5 w-3.5" />
-                              <span>Pause</span>
-                            </>
-                          ) : (
-                            <>
-                              <Play className="h-3.5 w-3.5" />
-                              <span>Play</span>
-                            </>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => setMediaToDelete({ reportCode: report.report_code, mediaType: 'audio', title: 'Voice Recording' })}
-                          className="rounded-lg border border-rose-300 bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer"
-                          title="Delete Voice Recording"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+                    <div className="pt-1">
+                      <IncidentAudioPlayer 
+                        src={report.audio_url} 
+                        duration={report.audio_duration} 
+                        label="Voice Recording" 
+                      />
                     </div>
                   )}
                 </div>

@@ -271,6 +271,7 @@ export interface EmergencyReport {
   dispatch_status?: 'AUTOMATICALLY_DISPATCHED' | 'PATROL_UNAVAILABLE' | 'MANUAL_DISPATCH_REQUIRED' | 'NO_GPS' | 'PENDING';
   assigned_patrol_id?: string | null;
   assigned_patrol_code?: string | null;
+  reported_at?: string;
   created_at: string;
   updated_at: string;
 }

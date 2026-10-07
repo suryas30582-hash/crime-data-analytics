@@ -61,7 +61,7 @@ export type TranslationKey =
 
 export const translations: Record<string, Record<TranslationKey, string>> = {
   en: {
-    appName: 'Crime Data Analytics',
+    appName: 'CrimeLytixs',
     tagline: 'Analyze. Understand. Predict.',
     exploreData: 'Explore Crime Data',
     signIn: 'Sign In',

@@ -28,9 +28,17 @@ server/uploads/
 Thumbs.db
 
 # SQLite database files (Database is initialized automatically on server start)
+server/data/*.db
 server/data/*.db-journal
 server/data/*.db-wal
 server/data/*.db-shm
+*.db
+uploads/
+/uploads/
+audit_run.js
+check_media_all.js
+final_verify.js
+media_clerk_verify.js
 
 # Editor directories
 .vscode/
@@ -38,4 +46,5 @@ server/data/*.db-shm
 
 # Scratch & temporary test scripts
 scratch/
+
 

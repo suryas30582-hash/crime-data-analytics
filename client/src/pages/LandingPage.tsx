@@ -211,8 +211,8 @@ export const LandingPage: React.FC = () => {
 
         {/* 2. PROJECT BRANDING TITLE */}
         <div className="space-y-3">
-          <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black tracking-widest bg-gradient-to-r from-[#FFFFFF] via-[#E2E8F0] to-[#D65A31] bg-clip-text text-transparent drop-shadow-[0_4px_25px_rgba(0,0,0,0.8)] uppercase font-sans">
-            CRIMELYTICS
+          <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black tracking-widest bg-gradient-to-r from-[#FFFFFF] via-[#E2E8F0] to-[#D65A31] bg-clip-text text-transparent drop-shadow-[0_4px_25px_rgba(0,0,0,0.8)] font-sans">
+            CrimeLytixs
           </h1>
           <div className="flex items-center justify-center space-x-3 text-xs sm:text-sm font-bold tracking-[0.35em] text-[#D65A31] uppercase">
             <span className="w-8 h-[1px] bg-[#D65A31]/50" />

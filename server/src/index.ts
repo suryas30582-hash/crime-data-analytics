@@ -1,3 +1,8 @@
+import dns from 'dns';
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
+
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -34,12 +39,28 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-// Serve uploaded media
+// Serve uploaded media with correct MIME headers & byte ranges for browser audio playback
 const uploadsDir = path.resolve(__dirname, '../../uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', express.static(uploadsDir, {
+  setHeaders: (res, filePath) => {
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.webm') {
+      res.setHeader('Content-Type', 'audio/webm');
+    } else if (ext === '.ogg') {
+      res.setHeader('Content-Type', 'audio/ogg');
+    } else if (ext === '.mp3') {
+      res.setHeader('Content-Type', 'audio/mpeg');
+    } else if (ext === '.wav') {
+      res.setHeader('Content-Type', 'audio/wav');
+    } else if (ext === '.mp4' || ext === '.m4a') {
+      res.setHeader('Content-Type', 'audio/mp4');
+    }
+    res.setHeader('Accept-Ranges', 'bytes');
+  }
+}));
 
 // Serve frontend in production if dist exists
 const clientDist = path.resolve(__dirname, '../../client/dist');

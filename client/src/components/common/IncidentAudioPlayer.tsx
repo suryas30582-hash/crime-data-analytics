@@ -82,19 +82,7 @@ export const IncidentAudioPlayer: React.FC<IncidentAudioPlayerProps> = ({
     } else {
       try {
         setHasError(false);
-        // Workaround for Chromium WebM duration infinity bug
-        if (audioRef.current.duration === Infinity) {
-          audioRef.current.currentTime = 1e101;
-          audioRef.current.ontimeupdate = function () {
-            if (audioRef.current) {
-              audioRef.current.ontimeupdate = handleTimeUpdate;
-              audioRef.current.currentTime = 0;
-              audioRef.current.play().catch(handleError);
-            }
-          };
-          return;
-        }
-
+        setErrorMessage('');
         await audioRef.current.play();
         setIsPlaying(true);
       } catch (err: any) {
@@ -118,8 +106,6 @@ export const IncidentAudioPlayer: React.FC<IncidentAudioPlayerProps> = ({
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const progressPercent = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
-
   return (
     <div
       className={`inline-flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 px-3 py-2 rounded-xl bg-[#FAF0EC] border border-[#EEDFD9] text-xs ${className}`}
@@ -140,12 +126,11 @@ export const IncidentAudioPlayer: React.FC<IncidentAudioPlayerProps> = ({
         <button
           type="button"
           onClick={togglePlay}
-          disabled={hasError}
           className={`h-7 w-7 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-xs ${
             isPlaying
               ? 'bg-[#542A20] text-white'
               : 'bg-[#883A2E] text-white hover:bg-[#752F24]'
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
+          }`}
           title={isPlaying ? 'Pause' : 'Play Audio Recording'}
         >
           {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
@@ -173,9 +158,9 @@ export const IncidentAudioPlayer: React.FC<IncidentAudioPlayerProps> = ({
           </span>
         </div>
       ) : (
-        <div className="flex items-center space-x-1.5 text-[10px] text-[#D65A31]">
+        <div className="flex items-center space-x-2 text-[10px] text-[#D65A31]">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-          <span>{errorMessage || 'Playback error'}</span>
+          <span>Playback error</span>
           <button
             type="button"
             onClick={() => {
@@ -184,10 +169,19 @@ export const IncidentAudioPlayer: React.FC<IncidentAudioPlayerProps> = ({
                 togglePlay();
               }
             }}
-            className="underline ml-1 font-semibold cursor-pointer"
+            className="underline font-semibold cursor-pointer"
           >
             Retry
           </button>
+          <a
+            href={fullUrl}
+            target="_blank"
+            rel="noreferrer"
+            download
+            className="underline font-bold text-[#883A2E] ml-1"
+          >
+            Download Audio
+          </a>
         </div>
       )}
     </div>

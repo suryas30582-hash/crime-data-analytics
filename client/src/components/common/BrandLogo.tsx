@@ -39,7 +39,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
             {/* Subtle grid texture */}
             <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:6px_6px]"></div>
 
-            {/* Custom High-Tech Crimelytixs Shield + Analytics Radar SVG */}
+            {/* Custom High-Tech CrimeLytixs Shield + Analytics Radar SVG */}
             <svg
               className="h-3/5 w-3/5 text-[#FFFDFC] transition-transform duration-300 group-hover:scale-110"
               viewBox="0 0 24 24"
@@ -107,7 +107,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
       <div>
         <div className="flex items-center space-x-2">
           <span className={`font-black tracking-tight ${brandTextSize} bg-gradient-to-r from-[#542A20] via-[#883A2E] to-[#D65A31] bg-clip-text text-transparent font-sans drop-shadow-sm`}>
-            Crimelytixs
+            CrimeLytixs
           </span>
           {showBadge && (
             <span className="hidden sm:inline-flex items-center rounded-full bg-[#883A2E]/10 px-2 py-0.5 text-[9px] font-bold text-[#883A2E] border border-[#883A2E]/25 tracking-wider uppercase font-mono">

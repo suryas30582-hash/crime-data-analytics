@@ -49,6 +49,13 @@ export function initDatabase() {
     console.warn('Schema migration notice:', mErr);
   }
 
+  // Non-destructive migrations for users table extended attributes
+  try { db.exec('ALTER TABLE users ADD COLUMN badge_number TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE users ADD COLUMN station TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE users ADD COLUMN department TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE users ADD COLUMN phone TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE users ADD COLUMN status TEXT DEFAULT "active";'); } catch {}
+
   db.exec(`
 
     CREATE TABLE IF NOT EXISTS datasets (
@@ -125,6 +132,7 @@ export function initDatabase() {
       citizen_phone TEXT,
       status TEXT NOT NULL DEFAULT 'RECEIVED',
       status_timeline TEXT,
+      audio_duration REAL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -135,9 +143,25 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_emergency_created ON emergency_reports(created_at);
   `);
 
-  // Non-destructive migrations for user identification
+  // Non-destructive migrations for user identification, media metadata & GPS/reads tracking
   try { db.exec('ALTER TABLE emergency_reports ADD COLUMN user_id TEXT;'); } catch {}
   try { db.exec('ALTER TABLE emergency_reports ADD COLUMN user_email TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE emergency_reports ADD COLUMN audio_duration REAL;'); } catch {}
+  // P3 fix: explicit GPS availability flag (1 = GPS present, 0 = unavailable)
+  try { db.exec('ALTER TABLE emergency_reports ADD COLUMN gps_available INTEGER DEFAULT 1;'); } catch {}
+
+  // P4 fix: officer-read tracking for accurate notification badge counts
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS emergency_reads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_code TEXT NOT NULL,
+      officer_id TEXT NOT NULL,
+      read_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(report_code, officer_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_reads_code ON emergency_reads(report_code);
+    CREATE INDEX IF NOT EXISTS idx_reads_officer ON emergency_reads(officer_id);
+  `);
 
   db.exec(`
 
@@ -240,6 +264,8 @@ export function initDatabase() {
   // Non-destructive schema column migrations for emergency_reports & patrol_assignments
   const emergencyColumns = [
     'reported_at DATETIME',
+    'viewed_at DATETIME',
+    'acknowledged_at DATETIME',
     'verified_at DATETIME',
     'priority_assigned_at DATETIME',
     'patrol_assigned_at DATETIME',

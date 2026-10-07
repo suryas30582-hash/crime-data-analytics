@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { db } from '../db/schema';
 import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { syncUserToSupabase } from '../db/supabaseSync';
 import { generateToken, AuthRequest } from '../middleware/auth';
 
@@ -423,51 +424,77 @@ export async function sendOTP(req: Request, res: Response) {
       VALUES (?, ?, ?, ?, 0, ?)
     `).run(crypto.randomUUID(), cleanEmail, codeHash, expiresAt, resendAfter);
 
-    // Ensure Resend API Key is configured before attempting email dispatch
-    if (!process.env.RESEND_API_KEY || !process.env.RESEND_API_KEY.trim()) {
-      console.warn('Resend configuration missing: RESEND_API_KEY environment variable is not set.');
-      return res.status(503).json({
-        error: 'Email delivery service is currently not configured on the server. Please configure RESEND_API_KEY environment variable.'
-      });
+    let sentSuccessfully = false;
+
+    if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim()) {
+      try {
+        const resend = new Resend(process.env.RESEND_API_KEY.trim());
+        const fromAddress = (process.env.RESEND_FROM || 'Crime Analytics Portal <onboarding@resend.dev>').trim();
+        const { data, error: sendError } = await resend.emails.send({
+          from: fromAddress,
+          to: [cleanEmail],
+          subject: 'Your Verification Code - Crime Data Analytics Portal',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #eedfd9; border-radius: 16px; background-color: #fffdfc;">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <h2 style="color: #883a2e; margin: 0; font-size: 20px;">Crime Data Analytics Portal</h2>
+                <p style="color: #7a6360; font-size: 13px; margin-top: 4px;">Security Verification Code</p>
+              </div>
+              <div style="font-size: 34px; font-weight: bold; color: #2b1f1d; letter-spacing: 6px; padding: 16px; background-color: #fff7f4; text-align: center; border-radius: 12px; border: 1px border-[#eedfd9]; font-family: monospace;">
+                ${rawCode}
+              </div>
+              <p style="color: #542a20; font-size: 12px; margin-top: 24px; text-align: center;">
+                This code will expire in <strong>10 minutes</strong>. If you did not request this verification code, please ignore this email.
+              </p>
+            </div>
+          `
+        });
+        if (!sendError) sentSuccessfully = true;
+      } catch (err: any) {
+        console.warn('Resend email error, trying SMTP fallback:', err.message);
+      }
     }
 
-    const resend = new Resend(process.env.RESEND_API_KEY.trim());
-    const fromAddress = (process.env.RESEND_FROM || 'Crime Analytics Portal <onboarding@resend.dev>').trim();
-
-    try {
-      const { data, error: sendError } = await resend.emails.send({
-        from: fromAddress,
-        to: [cleanEmail],
-        subject: 'Your Verification Code - Crime Data Analytics Portal',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #eedfd9; border-radius: 16px; background-color: #fffdfc;">
-            <div style="text-align: center; margin-bottom: 20px;">
-              <h2 style="color: #883a2e; margin: 0; font-size: 20px;">Crime Data Analytics Portal</h2>
-              <p style="color: #7a6360; font-size: 13px; margin-top: 4px;">Security Verification Code</p>
-            </div>
-            <div style="font-size: 34px; font-weight: bold; color: #2b1f1d; letter-spacing: 6px; padding: 16px; background-color: #fff7f4; text-align: center; border-radius: 12px; border: 1px border-[#eedfd9]; font-family: monospace;">
-              ${rawCode}
-            </div>
-            <p style="color: #542a20; font-size: 12px; margin-top: 24px; text-align: center;">
-              This code will expire in <strong>10 minutes</strong>. If you did not request this verification code, please ignore this email.
-            </p>
-          </div>
-        `
-      });
-
-      if (sendError) {
-        console.error('Resend email dispatch error:', sendError.message || sendError);
-        db.prepare('DELETE FROM otp_codes WHERE email = ?').run(cleanEmail);
-        return res.status(500).json({
-          error: 'Failed to deliver verification code to your email inbox. Please check the email address or try again.'
+    if (!sentSuccessfully && process.env.SMTP_USER && process.env.SMTP_PASS) {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST || 'smtp.gmail.com',
+          port: parseInt(process.env.SMTP_PORT || '587', 10),
+          secure: process.env.SMTP_SECURE === 'true',
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS
+          }
         });
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || `"Crime Analytics" <${process.env.SMTP_USER}>`,
+          to: cleanEmail,
+          subject: 'Your Verification Code - Crime Data Analytics Portal',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #eedfd9; border-radius: 16px; background-color: #fffdfc;">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <h2 style="color: #883a2e; margin: 0; font-size: 20px;">Crime Data Analytics Portal</h2>
+                <p style="color: #7a6360; font-size: 13px; margin-top: 4px;">Security Verification Code</p>
+              </div>
+              <div style="font-size: 34px; font-weight: bold; color: #2b1f1d; letter-spacing: 6px; padding: 16px; background-color: #fff7f4; text-align: center; border-radius: 12px; border: 1px border-[#eedfd9]; font-family: monospace;">
+                ${rawCode}
+              </div>
+              <p style="color: #542a20; font-size: 12px; margin-top: 24px; text-align: center;">
+                This code will expire in <strong>10 minutes</strong>. If you did not request this verification code, please ignore this email.
+              </p>
+            </div>
+          `
+        });
+        sentSuccessfully = true;
+      } catch (smtpErr: any) {
+        console.error('SMTP email error:', smtpErr.message);
       }
-    } catch (mailErr: any) {
-      console.error('Resend send error:', mailErr?.message || mailErr);
-      // Clean up unsent OTP entry on mail dispatch failure
+    }
+
+    if (!sentSuccessfully) {
       db.prepare('DELETE FROM otp_codes WHERE email = ?').run(cleanEmail);
       return res.status(500).json({
-        error: 'Failed to deliver verification code to your email inbox. Please check the email address or try again.'
+        error: 'Failed to deliver verification code to your email inbox. Please check configuration or try again.'
       });
     }
 

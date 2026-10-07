@@ -37,8 +37,10 @@ export async function syncUserToSupabase(user: {
 /**
  * Sync emergency report to Supabase `emergency_reports` table
  */
-export async function syncEmergencyReportToSupabase(report: any) {
-  if (!isSupabaseConfigured() || !supabase) return;
+export async function syncEmergencyReportToSupabase(report: any): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, error: 'Supabase is not configured' };
+  }
 
   try {
     const { error } = await supabase.from('emergency_reports').upsert(
@@ -53,8 +55,8 @@ export async function syncEmergencyReportToSupabase(report: any) {
         longitude: report.longitude || null,
         location_address: report.location_address || null,
         state: report.state || 'Tamil Nadu',
-        district: report.district || 'Chennai',
-        city: report.city || 'Chennai',
+        district: report.district || null,
+        city: report.city || null,
         citizen_name: report.citizen_name || 'Anonymous',
         citizen_phone: report.citizen_phone || null,
         status: report.status,
@@ -82,12 +84,15 @@ export async function syncEmergencyReportToSupabase(report: any) {
     );
 
     if (error) {
-      console.error('Supabase sync report error:', error.message);
+      console.error(`[Supabase Sync Error] Emergency report ${report.report_code}:`, error.message);
+      return { success: false, error: error.message };
     } else {
       console.log(`[Supabase] Emergency report ${report.report_code} synced successfully.`);
+      return { success: true };
     }
   } catch (err: any) {
-    console.error('Supabase sync report exception:', err.message);
+    console.error(`[Supabase Sync Exception] Emergency report ${report?.report_code}:`, err.message);
+    return { success: false, error: err.message };
   }
 }
 

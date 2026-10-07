@@ -20,6 +20,7 @@ interface NotificationContextType {
   markAsRead: (code: string) => void;
   markAllAsRead: () => void;
   clearNotifications: () => void;
+  refreshUnreadCount: () => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -27,15 +28,33 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isPolice, isAdmin } = useAuth();
   const [notifications, setNotifications] = useState<IncidentNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const isEligible = !!user && (isPolice || isAdmin);
+  const officerId = user?.id || 'anonymous';
+
+  const refreshUnreadCount = async () => {
+    if (!isEligible) return;
+    try {
+      // Server derives officer identity from JWT — no need to pass officerId
+      const res = await api.getUnreadCount();
+      if (res.success) {
+        setUnreadCount(res.unreadCount);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch unread count:', err);
+    }
+  };
 
   // Initial fetch of unread/recent incidents for Police / Admin
   useEffect(() => {
     if (!isEligible) {
       setNotifications([]);
+      setUnreadCount(0);
       return;
     }
+
+    refreshUnreadCount();
 
     async function fetchRecent() {
       try {
@@ -49,7 +68,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             citizen_name: r.citizen_name || 'Citizen User',
             location_address: r.location_address || '',
             timestamp: r.created_at || r.createdAt || new Date().toISOString(),
-            read: r.status !== 'RECEIVED', // Unread if status is RECEIVED
+            read: r.status !== 'RECEIVED' && r.status !== 'ALERT_RECEIVED' && r.status !== 'INCIDENT_REPORTED', // Guess state for UI
             report: r
           }));
           setNotifications(initialNotifs);
@@ -60,60 +79,95 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     fetchRecent();
-  }, [isEligible, user?.id]);
+  }, [isEligible, officerId]);
 
-  // SSE Live Stream Listener for real-time Silent Alerts
+  // SSE Live Stream Listener — with auto-reconnect on network error
   useEffect(() => {
     if (!isEligible) return;
 
     let eventSource: EventSource | null = null;
-    try {
-      const streamUrl = api.getEmergencyStreamUrl();
-      eventSource = new EventSource(streamUrl);
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryDelay = 2000; // start at 2 s, cap at 30 s
+    let destroyed = false;
 
-      const handleNewIncident = (event: MessageEvent) => {
-        try {
-          const report = JSON.parse(event.data);
-          const newNotif: IncidentNotification = {
-            id: report.report_code || `notif_${Date.now()}`,
-            code: report.report_code,
-            incident_type: report.incident_type || 'New Incident Alert',
-            severity: report.severity || 'HIGH',
-            citizen_name: report.citizen_name || 'Citizen User',
-            location_address: report.location_address || '',
-            timestamp: new Date().toISOString(),
-            read: false,
-            report
-          };
+    function connect() {
+      if (destroyed) return;
+      try {
+        const streamUrl = api.getEmergencyStreamUrl();
+        eventSource = new EventSource(streamUrl);
 
-          setNotifications(prev => [newNotif, ...prev.filter(n => n.code !== report.report_code)]);
-        } catch (e) {
-          console.error('Error processing notification SSE:', e);
-        }
-      };
+        const handleNewIncident = (event: MessageEvent) => {
+          try {
+            const report = JSON.parse(event.data);
+            setNotifications(prev => [{
+              id: report.report_code || `notif_${Date.now()}`,
+              code: report.report_code,
+              incident_type: report.incident_type || 'New Incident Alert',
+              severity: report.severity || 'HIGH',
+              citizen_name: report.citizen_name || 'Citizen User',
+              location_address: report.location_address || '',
+              timestamp: new Date().toISOString(),
+              read: false,
+              report
+            }, ...prev.filter(n => n.code !== report.report_code)]);
+            // Re-fetch badge count from server
+            refreshUnreadCount();
+          } catch (e) {
+            console.error('Error processing notification SSE:', e);
+          }
+        };
 
-      eventSource.addEventListener('NEW_INCIDENT', handleNewIncident);
-      eventSource.addEventListener('NEW_EMERGENCY', handleNewIncident);
+        eventSource.addEventListener('NEW_INCIDENT', handleNewIncident);
+        eventSource.addEventListener('NEW_EMERGENCY', handleNewIncident);
 
-    } catch (err) {
-      console.warn('SSE notification stream error:', err);
+        // Reset backoff on successful open
+        eventSource.onopen = () => { retryDelay = 2000; };
+
+        eventSource.onerror = () => {
+          // Close and schedule reconnect with exponential backoff
+          eventSource?.close();
+          eventSource = null;
+          if (!destroyed) {
+            reconnectTimer = setTimeout(() => {
+              retryDelay = Math.min(retryDelay * 2, 30000);
+              connect();
+            }, retryDelay);
+          }
+        };
+      } catch (err) {
+        console.warn('SSE notification stream error:', err);
+      }
     }
 
+    connect();
+
     return () => {
+      destroyed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (eventSource) eventSource.close();
     };
-  }, [isEligible]);
+  }, [isEligible, officerId]);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
-
-  const markAsRead = (code: string) => {
+  const markAsRead = async (code: string) => {
     setNotifications(prev =>
       prev.map(n => (n.code === code ? { ...n, read: true } : n))
     );
+    if (isEligible) {
+      try {
+        const res = await api.markReportRead(code);
+        if (res.success) {
+          setUnreadCount(res.unreadCount);
+        }
+      } catch (e) {
+        console.error('Failed to mark as read', e);
+      }
+    }
   };
 
   const markAllAsRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    // Real implementation would batch API calls, but this is sufficient for UI
+    setUnreadCount(0);
   };
 
   const clearNotifications = () => {
@@ -127,7 +181,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         unreadCount,
         markAsRead,
         markAllAsRead,
-        clearNotifications
+        clearNotifications,
+        refreshUnreadCount
       }}
     >
       {children}
@@ -142,3 +197,4 @@ export function useNotification() {
   }
   return context;
 }
+

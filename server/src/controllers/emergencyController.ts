@@ -1126,7 +1126,7 @@ function getEmergencyStatsHelper() {
  */
 export function getAllPoliceStations(req: Request, res: Response) {
   try {
-    const stations: any[] = db.prepare("SELECT * FROM police_stations WHERE status = 'ACTIVE' ORDER BY state, city, name").all();
+    const stations: any[] = db.prepare('SELECT * FROM police_stations WHERE status = ? ORDER BY state, city, name').all('ACTIVE');
     const enriched = stations.map(st => {
       const patrols = db.prepare('SELECT * FROM patrol_units WHERE station_id = ?').all(st.id);
       const availableCount = patrols.filter((p: any) => p.status === 'AVAILABLE').length;
@@ -1161,7 +1161,7 @@ export function getNearestPoliceStation(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: 'Invalid latitude or longitude' });
     }
 
-    const stations: any[] = db.prepare("SELECT * FROM police_stations WHERE status = 'ACTIVE'").all();
+    const stations: any[] = db.prepare('SELECT * FROM police_stations WHERE status = ?').all('ACTIVE');
 
     const ranked = stations
       .map(st => {

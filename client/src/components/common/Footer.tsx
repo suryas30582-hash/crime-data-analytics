@@ -11,7 +11,7 @@ export const Footer: React.FC = () => {
         <div className="flex flex-wrap items-center justify-center gap-4 text-[#7A6360]">
           <div className="flex items-center space-x-1.5">
             <Shield className="h-4 w-4 text-[#883A2E]" />
-            <span className="font-bold text-[#2B1F1D]">{t('appName', 'Crimelytixs')}</span>
+            <span className="font-bold text-[#2B1F1D]">{t('appName', 'CrimeLytixs')}</span>
           </div>
           <span className="text-[#EEDFD9]">|</span>
           <div className="flex items-center space-x-1.5">

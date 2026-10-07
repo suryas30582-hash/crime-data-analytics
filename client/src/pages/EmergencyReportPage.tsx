@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
+import { formatISTDateTime, formatISTTimeOnly } from '../utils/dateFormatter';
 
 export const EmergencyReportPage: React.FC = () => {
   const { t } = useLanguage();
@@ -259,7 +260,11 @@ export const EmergencyReportPage: React.FC = () => {
       }
 
       if (audioBlob) {
-        formData.append('audio', audioBlob, 'emergency_voice.webm');
+        let ext = '.webm';
+        if (audioBlob.type.includes('mp4') || audioBlob.type.includes('aac')) ext = '.mp4';
+        else if (audioBlob.type.includes('ogg')) ext = '.ogg';
+        else if (audioBlob.type.includes('wav')) ext = '.wav';
+        formData.append('audio', audioBlob, `emergency_voice${ext}`);
         formData.append('audio_duration', String(recordingTime));
       }
 
@@ -290,6 +295,179 @@ export const EmergencyReportPage: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Real-time SSE Stream & Polling for report status updates when SOS is submitted
+  useEffect(() => {
+    if (!submissionSuccess || !submittedReport?.report_code) return;
+
+    let eventSource: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let destroyed = false;
+
+    function connectSSE() {
+      if (destroyed) return;
+      try {
+        const streamUrl = api.getEmergencyStreamUrl();
+        eventSource = new EventSource(streamUrl);
+
+        eventSource.addEventListener('STATUS_UPDATE', (event) => {
+          try {
+            const updated = JSON.parse(event.data);
+            if (updated.report_code === submittedReport.report_code) {
+              setSubmittedReport((prev: any) => ({ ...prev, ...updated }));
+            }
+          } catch (e) {}
+        });
+
+        eventSource.addEventListener('PATROL_ASSIGNED', (event) => {
+          try {
+            const updated = JSON.parse(event.data);
+            if (updated.report_code === submittedReport.report_code) {
+              setSubmittedReport((prev: any) => ({ ...prev, ...updated }));
+            }
+          } catch (e) {}
+        });
+
+        eventSource.onerror = () => {
+          eventSource?.close();
+          eventSource = null;
+          if (!destroyed) {
+            reconnectTimer = setTimeout(() => connectSSE(), 3000);
+          }
+        };
+      } catch (err) {
+        console.warn('Citizen SSE error:', err);
+      }
+    }
+
+    connectSSE();
+
+    // Secondary safety poll every 3.5s
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await api.getReportByCode(submittedReport.report_code);
+        if (res.success && res.report) {
+          setSubmittedReport(res.report);
+        }
+      } catch (err) {}
+    }, 3500);
+
+    return () => {
+      destroyed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (eventSource) eventSource.close();
+      clearInterval(pollInterval);
+    };
+  }, [submissionSuccess, submittedReport?.report_code]);
+
+  const getTimelineMilestones = (report: any) => {
+    const timeline = Array.isArray(report?.status_timeline)
+      ? report.status_timeline
+      : (typeof report?.status_timeline === 'string' ? JSON.parse(report.status_timeline || '[]') : []);
+
+    const s = (report?.status || '').toUpperCase();
+    const findTime = (statuses: string[]) => {
+      const match = timeline.find((t: any) => statuses.includes(t.status?.toUpperCase()));
+      return match?.timestamp || null;
+    };
+
+    const submittedTime = findTime(['SUBMITTED', 'REQUEST_SUBMITTED']) || report?.created_at;
+    const receivedTime = findTime(['RECEIVED', 'ALERT_RECEIVED', 'INCIDENT_REPORTED']) || report?.reported_at || report?.created_at;
+    const viewedTime = findTime(['VIEWED', 'VIEWED_BY_OFFICER']) || report?.viewed_at;
+    const acknowledgedTime = findTime(['ACKNOWLEDGED', 'REVIEWING', 'POLICE_VERIFICATION', 'UNDER_REVIEW']) || report?.acknowledged_at || report?.verified_at;
+    const assignedTime = findTime(['OFFICER_ASSIGNED', 'PATROL_ASSIGNED']) || report?.patrol_assigned_at;
+    const enRouteTime = findTime(['EN_ROUTE', 'PATROL_EN_ROUTE', 'RESPONDING', 'ARRIVED', 'PATROL_ARRIVED']) || report?.en_route_at;
+    const resolvedTime = findTime(['RESOLVED', 'CLOSED']) || report?.resolved_at;
+
+    const isSubmitted = true;
+    const isReceived = true;
+    const isViewed = !!viewedTime || !!acknowledgedTime || !!assignedTime || !!enRouteTime || !!resolvedTime;
+    const isAcknowledged = !!acknowledgedTime || !!assignedTime || !!enRouteTime || !!resolvedTime;
+    const isAssigned = !!assignedTime || !!report?.patrol_assignment || !!report?.assigned_patrol_code || !!enRouteTime || !!resolvedTime;
+    const isEnRoute = !!enRouteTime || s === 'EN_ROUTE' || s === 'PATROL_EN_ROUTE' || s === 'RESPONDING' || s === 'ARRIVED' || !!resolvedTime;
+    const isResolved = !!resolvedTime || s === 'RESOLVED' || s === 'CLOSED';
+
+    return [
+      {
+        key: 'SUBMITTED',
+        label: 'Request Submitted',
+        isDone: isSubmitted,
+        isCurrent: !isReceived,
+        icon: '✓',
+        time: submittedTime ? formatISTTimeOnly(submittedTime) : ''
+      },
+      {
+        key: 'RECEIVED',
+        label: 'Received by Police',
+        isDone: isReceived,
+        isCurrent: isReceived && !isViewed && !isAcknowledged,
+        icon: '✓',
+        time: receivedTime ? formatISTTimeOnly(receivedTime) : ''
+      },
+      {
+        key: 'VIEWED',
+        label: 'Viewed by Officer',
+        isDone: isViewed,
+        isCurrent: isViewed && !isAcknowledged,
+        icon: '✓',
+        time: viewedTime ? formatISTTimeOnly(viewedTime) : ''
+      },
+      {
+        key: 'ACKNOWLEDGED',
+        label: 'Acknowledged',
+        isDone: isAcknowledged,
+        isCurrent: isAcknowledged && !isAssigned,
+        icon: '✓',
+        time: acknowledgedTime ? formatISTTimeOnly(acknowledgedTime) : ''
+      },
+      {
+        key: 'OFFICER_ASSIGNED',
+        label: 'Officer Assigned',
+        detail: report?.patrol_assignment ? `${report.patrol_assignment.officer_in_charge} (${report.patrol_assignment.unit_name})` : report?.assigned_patrol_code ? `Unit ${report.assigned_patrol_code}` : undefined,
+        isDone: isAssigned,
+        isCurrent: isAssigned && !isEnRoute && !isResolved,
+        icon: '🚓',
+        time: assignedTime ? formatISTTimeOnly(assignedTime) : ''
+      },
+      {
+        key: 'EN_ROUTE',
+        label: 'En Route',
+        detail: report?.patrol_assignment?.eta_minutes ? `ETA ~${report.patrol_assignment.eta_minutes} mins` : undefined,
+        isDone: isEnRoute,
+        isCurrent: isEnRoute && !isResolved,
+        icon: '📍',
+        time: enRouteTime ? formatISTTimeOnly(enRouteTime) : ''
+      },
+      {
+        key: 'RESOLVED',
+        label: 'Resolved',
+        isDone: isResolved,
+        isCurrent: isResolved,
+        icon: isResolved ? '✓' : '○',
+        time: resolvedTime ? formatISTTimeOnly(resolvedTime) : ''
+      }
+    ];
+  };
+
+  const getStatusMessage = (status?: string) => {
+    const s = (status || '').toUpperCase();
+    if (s === 'ARRIVED' || s === 'PATROL_ARRIVED' || s === 'RESOLVED' || s === 'CLOSED') {
+      return "Police patrol has resolved this emergency intervention.";
+    }
+    if (s === 'RESPONDING' || s === 'PATROL_EN_ROUTE' || s === 'EN_ROUTE') {
+      return "Police patrol unit is en route with emergency siren enabled.";
+    }
+    if (s === 'PATROL_ASSIGNED' || s === 'OFFICER_ASSIGNED' || s === 'PRIORITY_ASSIGNED') {
+      return "Patrol unit assigned and mobilized for immediate dispatch.";
+    }
+    if (s === 'ACKNOWLEDGED' || s === 'REVIEWING' || s === 'POLICE_VERIFICATION' || s === 'UNDER_REVIEW') {
+      return "Police Command Center has acknowledged your alert and is mobilizing response.";
+    }
+    if (s === 'VIEWED' || s === 'VIEWED_BY_OFFICER') {
+      return "Duty Police Officer has opened and reviewed your emergency SOS dossier.";
+    }
+    return "Emergency SOS alert received by Police Control Center. Dispatch in progress.";
   };
 
   const incidentTypes = [
@@ -371,7 +549,7 @@ export const EmergencyReportPage: React.FC = () => {
               <div>
                 <h2 className="text-2xl font-black text-[#2B1F1D]">EMERGENCY ALERT TRANSMITTED</h2>
                 <p className="text-sm text-[#2E7D32] font-semibold mt-1">
-                  Police Control Center has received your alert and dispatched the nearest response team.
+                  Police Control Center has received your alert. Live response tracking is active below.
                 </p>
               </div>
 
@@ -398,23 +576,96 @@ export const EmergencyReportPage: React.FC = () => {
                     <span className="text-[#7A6360]">Location Transmitted:</span>
                     <p className="font-medium text-[#2B1F1D] truncate">{submittedReport.location_address}</p>
                   </div>
+                  <div className="col-span-2 pt-1 border-t border-[#EEDFD9]">
+                    <span className="text-[#7A6360]">Submission Time (IST):</span>
+                    <p className="font-semibold text-[#883A2E]">{formatISTDateTime(submittedReport.created_at || submittedReport.reported_at)}</p>
+                  </div>
                 </div>
               </div>
 
-              {/* Live Status Progress Bar */}
-              <div className="max-w-md mx-auto pt-2">
-                <div className="flex items-center justify-between text-[11px] font-semibold text-[#7A6360] mb-2">
-                  <span className="text-[#883A2E] flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-[#883A2E] animate-ping"></span>
-                    1. Alert Received
+              {/* 7-Step Citizen Request Response Tracker */}
+              <div className="max-w-lg mx-auto p-5 rounded-2xl border border-[#EEDFD9] bg-[#FAF0EC]/80 shadow-warm-xs space-y-4 text-left">
+                <div className="flex items-center justify-between border-b border-[#EEDFD9] pb-2.5">
+                  <div className="flex items-center space-x-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#2E7D32] animate-ping"></span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#2B1F1D]">Citizen Response Tracking</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-[#883A2E] font-semibold bg-white px-2 py-0.5 rounded border border-[#EEDFD9]">
+                    Live SSE Stream
                   </span>
-                  <span>2. Reviewing</span>
-                  <span>3. Patrol Assigned</span>
-                  <span>4. Responding</span>
                 </div>
-                <div className="w-full bg-[#EEDFD9] rounded-full h-2 overflow-hidden">
-                  <div className="bg-gradient-to-r from-[#883A2E] to-[#D65A31] h-2 rounded-full w-1/4 transition-all duration-500"></div>
+
+                <div className="space-y-3">
+                  {getTimelineMilestones(submittedReport).map((milestone) => (
+                    <div
+                      key={milestone.key}
+                      className={`flex items-start justify-between p-2.5 rounded-xl transition-all ${
+                        milestone.isCurrent
+                          ? 'bg-white border-2 border-[#883A2E] shadow-sm'
+                          : milestone.isDone
+                          ? 'bg-white/70 border border-[#2E7D32]/30'
+                          : 'bg-transparent border border-dashed border-[#EEDFD9] opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-start space-x-2.5">
+                        <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                          milestone.isDone
+                            ? 'bg-[#2E7D32] text-white shadow-xs'
+                            : milestone.isCurrent
+                            ? 'bg-[#883A2E] text-white animate-pulse'
+                            : 'border border-[#7A6360]/40 text-[#7A6360]'
+                        }`}>
+                          {milestone.icon}
+                        </div>
+                        <div>
+                          <p className={`text-xs font-bold ${
+                            milestone.isCurrent ? 'text-[#883A2E]' : milestone.isDone ? 'text-[#2B1F1D]' : 'text-[#7A6360]'
+                          }`}>
+                            {milestone.label}
+                          </p>
+                          {milestone.detail && (
+                            <p className="text-[11px] text-[#7A6360] mt-0.5 font-medium">{milestone.detail}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {milestone.time && (
+                        <span className="text-[11px] font-mono font-semibold text-[#883A2E] shrink-0 ml-2">
+                          {milestone.time}
+                        </span>
+                      )}
+                    </div>
+                  ))}
                 </div>
+
+                {/* Live Status Message */}
+                <div className="p-3 rounded-xl bg-[#883A2E]/10 border border-[#883A2E]/20 text-xs font-bold text-[#883A2E] text-center">
+                  {getStatusMessage(submittedReport.status)}
+                </div>
+
+                {/* Patrol Unit Details Callout */}
+                {(submittedReport.patrol_assignment || submittedReport.assigned_patrol_code) && (
+                  <div className="p-3.5 rounded-xl border border-purple-200 bg-purple-50/80 text-xs space-y-1.5 text-purple-900">
+                    <div className="font-bold border-b border-purple-200 pb-1 flex items-center justify-between">
+                      <span className="flex items-center space-x-1.5">
+                        <Shield className="h-3.5 w-3.5 text-purple-700" />
+                        <span>Assigned Patrol Response Unit</span>
+                      </span>
+                      <span className="font-mono bg-purple-200 px-2 py-0.5 rounded text-[10px]">
+                        {submittedReport.patrol_assignment?.unit_name || submittedReport.assigned_patrol_code}
+                      </span>
+                    </div>
+                    {submittedReport.patrol_assignment?.officer_in_charge && (
+                      <p><span className="text-purple-700 font-medium">Officer in Charge:</span> {submittedReport.patrol_assignment.officer_in_charge}</p>
+                    )}
+                    {submittedReport.patrol_assignment?.vehicle_type && (
+                      <p><span className="text-purple-700 font-medium">Vehicle:</span> {submittedReport.patrol_assignment.vehicle_type}</p>
+                    )}
+                    {submittedReport.patrol_assignment?.eta_minutes && (
+                      <p><span className="text-purple-700 font-medium">Estimated Arrival:</span> ~{submittedReport.patrol_assignment.eta_minutes} mins</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">

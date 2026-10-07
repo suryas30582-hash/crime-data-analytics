@@ -254,6 +254,9 @@ export const api = {
     const base = API_BASE.replace(/\/api$/, '');
     return `${base}${path.startsWith('/') ? '' : '/'}${path}`;
   },
+  getReportByCode: (code: string) => {
+    return request<{ success: boolean; report: any }>(`/emergency/reports/${encodeURIComponent(code)}`);
+  },
 
   // -----------------------------------------------------------
   // NEW RBAC INCIDENT WORKFLOWS (USER, POLICE, ADMIN)
@@ -287,7 +290,13 @@ export const api = {
     if (params?.severity) q.append('severity', params.severity);
     if (params?.district) q.append('district', params.district);
     if (params?.search) q.append('search', params.search);
-    return request<{ success: boolean; count: number; incidents: any[] }>(`/incidents/police-feed?${q.toString()}`);
+    return request<{ success: boolean; count: number; incidents: any[]; reports?: any[]; stats?: any }>(`/incidents/police-feed?${q.toString()}`);
+  },
+
+  markReportViewed: (code: string) => {
+    return request<{ success: boolean; message: string; report: any }>(`/incidents/${encodeURIComponent(code)}/view`, {
+      method: 'POST'
+    });
   },
 
   updateIncidentStatus: (code: string, data: { status: string; notes?: string }) => {
@@ -377,6 +386,18 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ report_code, station_id, patrol_id, dispatch_notes })
       }
+    );
+  },
+
+  // P4: Notification badge endpoints — officer identity comes from JWT, never from query param
+  getUnreadCount: () => {
+    return request<{ success: boolean; unreadCount: number; officerId: string | null }>(`/emergency/unread-count`);
+  },
+
+  markReportRead: (code: string) => {
+    return request<{ success: boolean; unreadCount: number; markedCode: string }>(
+      `/emergency/reports/${encodeURIComponent(code)}/read`,
+      { method: 'POST' }
     );
   }
 };

@@ -28,6 +28,7 @@ import { useAuth } from '../context/AuthContext';
 import { useDataset } from '../context/DatasetContext';
 import { api } from '../services/api';
 import { IncidentAudioPlayer } from '../components/common/IncidentAudioPlayer';
+import { formatISTDateTime, formatISTTimeOnly } from '../utils/dateFormatter';
 
 const INCIDENT_CATEGORIES = [
   'Theft & Burglary',
@@ -95,6 +96,54 @@ export const UserDashboardPage: React.FC = () => {
     fetchMyReports();
   }, []);
 
+  // Real-time SSE listener for status updates
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let destroyed = false;
+
+    function connectSSE() {
+      if (destroyed) return;
+      try {
+        const streamUrl = api.getEmergencyStreamUrl();
+        eventSource = new EventSource(streamUrl);
+
+        const handleUpdate = (event: MessageEvent) => {
+          try {
+            const updated = JSON.parse(event.data);
+            if (!updated?.report_code) return;
+            setMyReports(prev =>
+              prev.map(r => r.report_code === updated.report_code ? { ...r, ...updated } : r)
+            );
+          } catch (e) {
+            console.error('SSE parse error in UserDashboardPage:', e);
+          }
+        };
+
+        eventSource.addEventListener('STATUS_UPDATE', handleUpdate);
+        eventSource.addEventListener('PATROL_ASSIGNED', handleUpdate);
+
+        eventSource.onerror = () => {
+          eventSource?.close();
+          eventSource = null;
+          if (!destroyed) {
+            reconnectTimeout = setTimeout(connectSSE, 5000);
+          }
+        };
+      } catch (err) {
+        console.error('User SSE setup failed:', err);
+      }
+    }
+
+    connectSSE();
+
+    return () => {
+      destroyed = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (eventSource) eventSource.close();
+    };
+  }, []);
+
   // Geolocation detection
   const handleDetectLocation = () => {
     if (!navigator.geolocation) {
@@ -113,10 +162,10 @@ export const UserDashboardPage: React.FC = () => {
       },
       err => {
         console.warn('Geolocation error:', err.message);
-        // Fallback default coordinates (Chennai)
-        setLatitude(13.0827);
-        setLongitude(80.2707);
-        setLocationAddress(locationAddress || 'Central District, Chennai (Default)');
+        // GPS unavailable — do NOT use any default/hardcoded coordinates
+        setLatitude(null);
+        setLongitude(null);
+        setLocationAddress(locationAddress || 'GPS location unavailable — please enter your address manually');
         setIsDetectingLocation(false);
       },
       { timeout: 8000 }
@@ -262,23 +311,90 @@ export const UserDashboardPage: React.FC = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
+    const s = (status || '').toUpperCase();
+    switch (s) {
+      case 'ALERT_RECEIVED':
       case 'RECEIVED':
-        return <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#D65A31]/15 text-[#D65A31] border border-[#D65A31]/30">RECEIVED</span>;
-      case 'UNDER_REVIEW':
+      case 'INCIDENT_REPORTED':
+        return <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#D65A31]/15 text-[#D65A31] border border-[#D65A31]/30">ALERT RECEIVED</span>;
+      case 'VIEWED':
+        return <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">VIEWED BY OFFICER</span>;
+      case 'ACKNOWLEDGED':
       case 'REVIEWING':
-        return <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">UNDER REVIEW</span>;
-      case 'INVESTIGATING':
-        return <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#883A2E]/15 text-[#883A2E] border border-[#883A2E]/30">INVESTIGATING</span>;
+      case 'UNDER_REVIEW':
+      case 'POLICE_VERIFICATION':
+        return <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">ACKNOWLEDGED</span>;
+      case 'OFFICER_ASSIGNED':
       case 'PATROL_ASSIGNED':
+      case 'PRIORITY_ASSIGNED':
+        return <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">OFFICER ASSIGNED</span>;
+      case 'EN_ROUTE':
       case 'RESPONDING':
-        return <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">PATROL DISPATCHED</span>;
+      case 'PATROL_EN_ROUTE':
+        return <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">EN ROUTE</span>;
+      case 'ARRIVED':
+      case 'PATROL_ARRIVED':
+        return <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-300">ARRIVED ON SCENE</span>;
       case 'RESOLVED':
       case 'CLOSED':
         return <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#2E7D32]/15 text-[#2E7D32] border border-[#2E7D32]/30">RESOLVED</span>;
       default:
         return <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700">{status}</span>;
     }
+  };
+
+  const renderResponseTracking = (report: any) => {
+    const s = (report.status || '').toUpperCase();
+    const isSubmitted = true;
+    const isReceived = true;
+    const isViewed = !!(report.viewed_at || ['VIEWED', 'ACKNOWLEDGED', 'REVIEWING', 'UNDER_REVIEW', 'OFFICER_ASSIGNED', 'PATROL_ASSIGNED', 'PRIORITY_ASSIGNED', 'EN_ROUTE', 'RESPONDING', 'PATROL_EN_ROUTE', 'ARRIVED', 'PATROL_ARRIVED', 'RESOLVED', 'CLOSED'].includes(s));
+    const isAcknowledged = !!(report.acknowledged_at || ['ACKNOWLEDGED', 'REVIEWING', 'UNDER_REVIEW', 'OFFICER_ASSIGNED', 'PATROL_ASSIGNED', 'PRIORITY_ASSIGNED', 'EN_ROUTE', 'RESPONDING', 'PATROL_EN_ROUTE', 'ARRIVED', 'PATROL_ARRIVED', 'RESOLVED', 'CLOSED'].includes(s));
+    const isAssigned = !!(report.patrol_assigned_at || report.patrol_assignment || ['OFFICER_ASSIGNED', 'PATROL_ASSIGNED', 'PRIORITY_ASSIGNED', 'EN_ROUTE', 'RESPONDING', 'PATROL_EN_ROUTE', 'ARRIVED', 'PATROL_ARRIVED', 'RESOLVED', 'CLOSED'].includes(s));
+    const isEnRoute = !!(report.en_route_at || (report.patrol_assignment && ['EN_ROUTE', 'ON_SCENE', 'COMPLETED'].includes((report.patrol_assignment.status || '').toUpperCase())) || ['EN_ROUTE', 'RESPONDING', 'PATROL_EN_ROUTE', 'ARRIVED', 'PATROL_ARRIVED', 'RESOLVED', 'CLOSED'].includes(s));
+    const isResolved = s === 'RESOLVED' || s === 'CLOSED' || !!report.resolved_at;
+
+    const stages = [
+      { id: 'submitted', label: 'Request Submitted', done: isSubmitted, current: !isReceived, time: formatISTTimeOnly(report.created_at || report.reported_at), icon: '✓' },
+      { id: 'received', label: 'Received by Police', done: isReceived, current: !isViewed, time: formatISTTimeOnly(report.reported_at || report.created_at), icon: '✓' },
+      { id: 'viewed', label: 'Viewed by Officer', done: isViewed, current: isViewed && !isAcknowledged, time: report.viewed_at ? formatISTTimeOnly(report.viewed_at) : (isViewed ? 'Viewed' : null), icon: isViewed ? '✓' : '👁️' },
+      { id: 'acknowledged', label: 'Acknowledged', done: isAcknowledged, current: isAcknowledged && !isAssigned, time: report.acknowledged_at ? formatISTTimeOnly(report.acknowledged_at) : (isAcknowledged ? 'Confirmed' : null), icon: isAcknowledged ? '✓' : '⏳' },
+      { id: 'assigned', label: 'Officer Assigned', done: isAssigned, current: isAssigned && !isEnRoute, time: report.patrol_assigned_at ? formatISTTimeOnly(report.patrol_assigned_at) : (report.patrol_assignment?.assigned_at ? formatISTTimeOnly(report.patrol_assignment.assigned_at) : null), detail: report.patrol_assignment ? `${report.patrol_assignment.unit_name} (${report.patrol_assignment.officer_in_charge})` : undefined, icon: '🚓' },
+      { id: 'en_route', label: 'En Route', done: isEnRoute, current: isEnRoute && !isResolved, time: report.en_route_at ? formatISTTimeOnly(report.en_route_at) : null, detail: report.patrol_assignment?.eta_minutes ? `ETA ~${report.patrol_assignment.eta_minutes} mins` : undefined, icon: '📍' },
+      { id: 'resolved', label: 'Resolved', done: isResolved, current: isResolved, time: report.resolved_at ? formatISTTimeOnly(report.resolved_at) : null, icon: isResolved ? '✓' : '○' }
+    ];
+
+    return (
+      <div className="mt-3 rounded-2xl border border-[#EEDFD9] bg-white p-3.5 space-y-2">
+        <div className="flex items-center justify-between text-xs font-bold text-[#883A2E]">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full bg-[#883A2E] animate-pulse"></span>
+            <span>Live Citizen Response Tracking</span>
+          </span>
+          <span className="text-[10px] font-normal text-[#7A6360]">Real-time Database Status</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-1">
+          {stages.map((stage) => (
+            <div
+              key={stage.id}
+              className={`flex flex-col p-2 rounded-xl text-left border transition-all ${
+                stage.done
+                  ? 'bg-[#2E7D32]/10 border-[#2E7D32]/30 text-[#2E7D32]'
+                  : stage.current
+                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-900 shadow-xs'
+                  : 'bg-[#FAF0EC]/60 border-[#EEDFD9] text-[#7A6360]/70'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs">{stage.icon}</span>
+                {stage.time && <span className="text-[9px] font-mono font-bold">{stage.time}</span>}
+              </div>
+              <span className="text-[11px] font-bold mt-1 leading-tight">{stage.label}</span>
+              {stage.detail && <span className="text-[9px] mt-0.5 opacity-90 truncate">{stage.detail}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -630,30 +746,56 @@ export const UserDashboardPage: React.FC = () => {
                     </div>
                     <div className="flex items-center space-x-2">
                       {getStatusBadge(report.status)}
-                      <span className="text-[11px] text-[#7A6360]">
-                        {new Date(report.created_at || report.createdAt).toLocaleDateString()}
+                      <span className="text-[11px] font-semibold text-[#883A2E] bg-white px-2 py-0.5 rounded border border-[#EEDFD9]">
+                        {formatISTDateTime(report.created_at || report.reported_at || report.createdAt)}
                       </span>
                     </div>
                   </div>
 
                   <p className="text-xs text-[#2B1F1D] leading-relaxed">{report.description}</p>
 
-                  <div className="flex flex-wrap items-center gap-4 text-[11px] text-[#7A6360] pt-1 border-t border-[#EEDFD9]">
-                    <span className="flex items-center space-x-1">
-                      <MapPin className="h-3.5 w-3.5 text-[#883A2E]" />
-                      <span>{report.location_address || `${report.city}, ${report.state}`}</span>
-                    </span>
+                  <div className="space-y-3 pt-1 border-t border-[#EEDFD9]">
+                    <div className="flex flex-wrap items-center gap-4 text-[11px] text-[#7A6360]">
+                      <span className="flex items-center space-x-1">
+                        <MapPin className="h-3.5 w-3.5 text-[#883A2E]" />
+                        <span>{report.location_address || `${report.city}, ${report.state}`}</span>
+                      </span>
+                    </div>
+
                     {report.photo_url && (
-                      <a
-                        href={api.getMediaUrl(report.photo_url)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[#883A2E] font-semibold hover:underline flex items-center space-x-1"
-                      >
-                        <Camera className="h-3.5 w-3.5" />
-                        <span>View Evidence Photo</span>
-                      </a>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs font-bold text-[#883A2E]">
+                          <span className="flex items-center gap-1.5">
+                            <Camera className="h-3.5 w-3.5" />
+                            <span>Photo Evidence</span>
+                          </span>
+                          <a
+                            href={api.getMediaUrl(report.photo_url)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] font-semibold underline hover:text-[#542A20]"
+                          >
+                            Open Image ↗
+                          </a>
+                        </div>
+                        <div className="relative rounded-xl border border-[#EEDFD9] overflow-hidden bg-black/5 max-w-xs">
+                          <img
+                            src={api.getMediaUrl(report.photo_url)}
+                            alt="Incident Evidence"
+                            className="max-h-40 w-full object-cover rounded-lg cursor-pointer hover:opacity-95"
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              target.style.display = 'none';
+                              if (target.parentElement) {
+                                target.parentElement.innerHTML = '<div className="p-2 text-[11px] text-[#7A6360]">⚠️ Photo unavailable</div>';
+                              }
+                            }}
+                            onClick={() => window.open(api.getMediaUrl(report.photo_url), '_blank')}
+                          />
+                        </div>
+                      </div>
                     )}
+
                     {report.audio_url && (
                       <IncidentAudioPlayer
                         src={report.audio_url}
@@ -662,6 +804,9 @@ export const UserDashboardPage: React.FC = () => {
                       />
                     )}
                   </div>
+
+                  {/* Citizen Request Response Tracking Timeline */}
+                  {renderResponseTracking(report)}
 
                   {/* Officer Investigation Notes */}
                   {report.officer_notes && (

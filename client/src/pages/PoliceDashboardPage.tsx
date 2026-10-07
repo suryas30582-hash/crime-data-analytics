@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ShieldAlert,
@@ -24,18 +24,25 @@ import {
   Database,
   UploadCloud,
   BarChart3,
-  CheckCircle2
+  CheckCircle2,
+  Volume2,
+  VolumeX,
+  Bell
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDataset } from '../context/DatasetContext';
 import { api } from '../services/api';
 import { IncidentAudioPlayer } from '../components/common/IncidentAudioPlayer';
+import { formatISTDateTime } from '../utils/dateFormatter';
+import { emergencyAlarm } from '../utils/emergencyAlarm';
 
 export const PoliceDashboardPage: React.FC = () => {
   const { user } = useAuth();
   const { datasets, activeDataset, activeDatasetId, setActiveDatasetId } = useDataset();
   const [incidents, setIncidents] = useState<any[]>([]);
+  const [serverStats, setServerStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [severityFilter, setSeverityFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,17 +65,45 @@ export const PoliceDashboardPage: React.FC = () => {
   const [actionLogs, setActionLogs] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'feed' | 'logs'>('feed');
 
+  // Alarm state & real-time SSE
+  const [isAlarmPlaying, setIsAlarmPlaying] = useState<boolean>(emergencyAlarm.getIsPlaying());
+  const [isAutoplayBlocked, setIsAutoplayBlocked] = useState<boolean>(emergencyAlarm.getIsAutoplayBlocked());
+  const knownCodesRef = useRef<Set<string>>(new Set());
+  const initialLoadDoneRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    const unsub = emergencyAlarm.subscribe(() => {
+      setIsAlarmPlaying(emergencyAlarm.getIsPlaying());
+      setIsAutoplayBlocked(emergencyAlarm.getIsAutoplayBlocked());
+    });
+    return () => {
+      unsub();
+      emergencyAlarm.stopAlarm();
+    };
+  }, []);
+
   const fetchIncidents = async () => {
     try {
       setIsLoading(true);
+      setFetchError(null);
       const data = await api.getPoliceIncidentFeed({
         status: statusFilter,
         severity: severityFilter,
         search: searchQuery
       });
-      setIncidents(data.incidents || []);
+      const incidentList = data.incidents || data.reports || [];
+      setIncidents(incidentList);
+      if (data.stats) {
+        setServerStats(data.stats);
+      }
+      // Populate known codes on initial load so old reports DO NOT trigger alarm on reload
+      if (!initialLoadDoneRef.current && incidentList.length > 0) {
+        incidentList.forEach((inc: any) => knownCodesRef.current.add(inc.report_code));
+        initialLoadDoneRef.current = true;
+      }
     } catch (err: any) {
       console.warn('Error fetching police feed:', err.message);
+      setFetchError(err.message || 'Failed to load emergency incident feed from server');
     } finally {
       setIsLoading(false);
     }
@@ -86,7 +121,74 @@ export const PoliceDashboardPage: React.FC = () => {
   useEffect(() => {
     fetchIncidents();
     fetchLogs();
-  }, [statusFilter, severityFilter]);
+  }, [statusFilter, severityFilter, searchQuery]);
+
+  // Connect to SSE Stream for real-time automatic emergency detection
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryDelay = 2000;
+    let destroyed = false;
+
+    function connectSSE() {
+      if (destroyed) return;
+      try {
+        const streamUrl = api.getEmergencyStreamUrl();
+        eventSource = new EventSource(streamUrl);
+
+        eventSource.addEventListener('NEW_EMERGENCY', (event) => {
+          try {
+            const newReport = JSON.parse(event.data);
+            if (!knownCodesRef.current.has(newReport.report_code)) {
+              knownCodesRef.current.add(newReport.report_code);
+              setIncidents(prev => [newReport, ...prev.filter(i => i.report_code !== newReport.report_code)]);
+              emergencyAlarm.startAlarm(newReport.report_code);
+            }
+          } catch (e) {
+            console.error('SSE Error in Police Dashboard:', e);
+          }
+        });
+
+        eventSource.addEventListener('STATUS_UPDATE', (event) => {
+          try {
+            const updated = JSON.parse(event.data);
+            setIncidents(prev => prev.map(i => i.report_code === updated.report_code ? { ...i, ...updated } : i));
+          } catch (e) {}
+        });
+
+        eventSource.addEventListener('PATROL_ASSIGNED', (event) => {
+          try {
+            const updated = JSON.parse(event.data);
+            setIncidents(prev => prev.map(i => i.report_code === updated.report_code ? { ...i, ...updated } : i));
+          } catch (e) {}
+        });
+
+        // Reset backoff on successful connection
+        eventSource.onopen = () => { retryDelay = 2000; };
+
+        eventSource.onerror = () => {
+          eventSource?.close();
+          eventSource = null;
+          if (!destroyed) {
+            reconnectTimer = setTimeout(() => {
+              retryDelay = Math.min(retryDelay * 2, 30000);
+              connectSSE();
+            }, retryDelay);
+          }
+        };
+      } catch (err) {
+        console.warn('SSE connection warning:', err);
+      }
+    }
+
+    connectSSE();
+
+    return () => {
+      destroyed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (eventSource) eventSource.close();
+    };
+  }, []);
 
   // Handle Status Update Submit
   const handleUpdateStatusSubmit = async (e: React.FormEvent) => {
@@ -136,12 +238,90 @@ export const PoliceDashboardPage: React.FC = () => {
     }
   };
 
-  // KPI calculations
-  const totalCount = incidents.length;
-  const criticalCount = incidents.filter(i => i.severity === 'CRITICAL').length;
-  const investigatingCount = incidents.filter(i => i.status === 'INVESTIGATING' || i.status === 'UNDER_REVIEW').length;
-  const dispatchedCount = incidents.filter(i => i.status === 'PATROL_ASSIGNED' || i.status === 'RESPONDING').length;
-  const resolvedCount = incidents.filter(i => i.status === 'RESOLVED' || i.status === 'CLOSED').length;
+  // KPI calculations with serverStats & local fallback
+  const totalCount = serverStats?.total_incidents ?? incidents.length;
+  const criticalCount = serverStats?.critical_alarms ?? serverStats?.critical_active ?? incidents.filter(i => i.severity === 'CRITICAL' && i.status !== 'RESOLVED' && i.status !== 'CLOSED').length;
+  const investigatingCount = serverStats?.under_investigation ?? serverStats?.active_incidents ?? incidents.filter(i => ['INVESTIGATING', 'UNDER_REVIEW', 'POLICE_VERIFICATION', 'REVIEWING', 'VIEWED', 'VIEWED_BY_OFFICER', 'ACKNOWLEDGED', 'RECEIVED', 'ALERT_RECEIVED', 'INCIDENT_REPORTED'].includes(i.status)).length;
+  const dispatchedCount = serverStats?.patrols_dispatched ?? serverStats?.patrols_responding ?? incidents.filter(i => ['PATROL_ASSIGNED', 'OFFICER_ASSIGNED', 'RESPONDING', 'PATROL_EN_ROUTE', 'EN_ROUTE', 'ARRIVED', 'PATROL_ARRIVED'].includes(i.status)).length;
+  const resolvedCount = serverStats?.resolved_incidents ?? serverStats?.resolved_count ?? incidents.filter(i => ['RESOLVED', 'CLOSED'].includes(i.status)).length;
+
+  const handleInspectReport = async (reportCode: string) => {
+    try {
+      await api.markReportViewed(reportCode);
+      fetchIncidents();
+    } catch (e) {
+      console.warn('Error marking report viewed:', e);
+    }
+  };
+
+  const getCitizenTrackingBadge = (inc: any) => {
+    const s = (inc.status || '').toUpperCase();
+    const timelineStr = JSON.stringify(inc.status_timeline || []);
+    const isResolved = s === 'RESOLVED' || s === 'CLOSED';
+    const isEnRoute = s === 'EN_ROUTE' || s === 'PATROL_EN_ROUTE' || s === 'RESPONDING';
+    const isAssigned = s === 'PATROL_ASSIGNED' || s === 'OFFICER_ASSIGNED' || !!inc.patrol_assignment || !!inc.assigned_patrol_code;
+    const isAcknowledged = s === 'ACKNOWLEDGED' || s === 'REVIEWING' || !!inc.acknowledged_at || timelineStr.includes('ACKNOWLEDGED');
+    const isViewed = s === 'VIEWED' || s === 'VIEWED_BY_OFFICER' || !!inc.viewed_at || timelineStr.includes('VIEWED');
+
+    if (isResolved) {
+      return (
+        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#2E7D32]/15 text-[#2E7D32] border border-[#2E7D32]/30">
+          <span>✓ RESOLVED</span>
+        </span>
+      );
+    }
+    if (isEnRoute) {
+      return (
+        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300 animate-pulse">
+          <span>📍 EN ROUTE</span>
+        </span>
+      );
+    }
+    if (isAssigned) {
+      return (
+        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
+          <span>🚓 OFFICER ASSIGNED</span>
+        </span>
+      );
+    }
+    if (isAcknowledged) {
+      return (
+        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#D65A31]/15 text-[#D65A31] border border-[#D65A31]/30">
+          <span>✓ ACKNOWLEDGED</span>
+        </span>
+      );
+    }
+    if (isViewed) {
+      return (
+        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+          <span>👁️ VIEWED BY OFFICER</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white animate-pulse">
+        <span>🚨 NEW • NOT YET VIEWED</span>
+      </span>
+    );
+  };
+
+  const handleQuickStatusUpdate = async (reportCode: string, targetStatus: string, note?: string) => {
+    try {
+      emergencyAlarm.stopAlarm();
+      await api.updateIncidentStatus(reportCode, {
+        status: targetStatus,
+        notes: note || `Status transitioned to ${targetStatus}`
+      });
+      fetchIncidents();
+      fetchLogs();
+    } catch (err: any) {
+      alert('Failed to update status: ' + err.message);
+    }
+  };
+
+  const activeAlarms = incidents.filter(i => 
+    i.status === 'ALERT_RECEIVED' || i.status === 'RECEIVED' || i.status === 'INCIDENT_REPORTED'
+  );
 
   return (
     <div className="space-y-6">
@@ -248,6 +428,122 @@ export const PoliceDashboardPage: React.FC = () => {
         </div>
       </div>
 
+      {/* PROMINENT EMERGENCY ALARM NOTIFICATION BANNER */}
+      {activeAlarms.length > 0 && (
+        <div className="rounded-3xl border-2 border-red-500 bg-gradient-to-r from-[#542A20] via-[#883A2E] to-[#542A20] p-6 shadow-2xl text-white space-y-4 animate-in slide-in-from-top-4 duration-300">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/20 pb-3">
+            <div className="flex items-center space-x-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-600 text-white animate-bounce shadow-lg">
+                <AlertTriangle className="h-6 w-6 text-white" />
+              </span>
+              <div>
+                <span className="text-xs font-black uppercase tracking-widest text-[#FAF0EC] flex items-center gap-2">
+                  <span>🚨 EMERGENCY ALERT TRIGGERED ({activeAlarms.length} NEW ALERT{activeAlarms.length > 1 ? 'S' : ''})</span>
+                </span>
+                <h2 className="text-base font-extrabold text-white">Immediate Action Required</h2>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {isAlarmPlaying && (
+                <button
+                  onClick={() => emergencyAlarm.stopAlarm()}
+                  className="px-3.5 py-1.5 rounded-xl border border-white bg-red-600 hover:bg-red-700 text-xs font-black text-white animate-pulse flex items-center space-x-1.5 cursor-pointer shadow-md"
+                  title="Stop alarm sound"
+                >
+                  <VolumeX className="h-3.5 w-3.5" />
+                  <span>Stop Alarm Sound</span>
+                </button>
+              )}
+              {isAutoplayBlocked && (
+                <button
+                  onClick={() => emergencyAlarm.playSinglePulse()}
+                  className="px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-500/20 text-xs font-bold text-amber-200 animate-pulse flex items-center space-x-1 cursor-pointer"
+                  title="Click to enable sound"
+                >
+                  <Volume2 className="h-3.5 w-3.5" />
+                  <span>⚠️ Enable Sound</span>
+                </button>
+              )}
+              <Link
+                to="/police-emergency"
+                className="px-4 py-2 rounded-xl bg-[#D65A31] text-xs font-bold hover:bg-[#C47A5A] transition-all shadow-md"
+              >
+                Open Command Center
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {activeAlarms.slice(0, 2).map((alarm: any) => (
+              <div key={alarm.report_code} className="rounded-2xl border border-white/20 bg-white/10 p-4 space-y-3 backdrop-blur-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs font-bold text-[#FAF0EC] bg-white/20 px-2.5 py-0.5 rounded">
+                    {alarm.report_code}
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white">
+                    {alarm.severity || 'CRITICAL'}
+                  </span>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-extrabold text-white">{alarm.incident_type}</h3>
+                  <p className="text-xs text-[#FAF0EC]/90 mt-1 line-clamp-2">{alarm.description}</p>
+                </div>
+
+                <div className="text-[11px] text-[#FAF0EC]/80 space-y-0.5">
+                  <p>📍 Location: {alarm.location_address || `${alarm.city}, ${alarm.state}`}</p>
+                  <p>🕒 Reported: {formatISTDateTime(alarm.created_at || alarm.reported_at)}</p>
+                </div>
+
+                {alarm.photo_url && (
+                  <div className="pt-1">
+                    <img
+                      src={api.getMediaUrl(alarm.photo_url)}
+                      alt="Alarm Photo Evidence"
+                      className="h-28 w-full object-cover rounded-lg border border-white/20 cursor-pointer hover:opacity-90"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        target.onerror = null;
+                        target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="%237A6360" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>';
+                      }}
+                      onClick={() => window.open(api.getMediaUrl(alarm.photo_url), '_blank')}
+                    />
+                  </div>
+                )}
+
+                {alarm.audio_url && (
+                  <div className="pt-1">
+                    <IncidentAudioPlayer src={alarm.audio_url} duration={alarm.audio_duration} label="Play Emergency Voice SOS" />
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/15">
+                  <button
+                    onClick={() => {
+                      emergencyAlarm.stopAlarm();
+                      handleQuickStatusUpdate(alarm.report_code, 'REVIEWING', 'Police officer acknowledged and reviewing incident details.');
+                    }}
+                    className="flex-1 py-2 px-3 rounded-xl bg-white text-[#883A2E] text-xs font-black hover:bg-[#FAF0EC] transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-sm"
+                  >
+                    <VolumeX className="h-4 w-4 text-[#883A2E]" />
+                    <span>Acknowledge / Stop Alarm</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      emergencyAlarm.stopAlarm();
+                      setDispatchIncident(alarm);
+                    }}
+                    className="flex-1 py-2 px-3 rounded-xl bg-[#D65A31] text-white text-xs font-bold hover:bg-[#C47A5A] transition-all cursor-pointer"
+                  >
+                    Dispatch Patrol
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFFDFC] p-4 shadow-warm-xs space-y-1">
@@ -328,13 +624,14 @@ export const PoliceDashboardPage: React.FC = () => {
               <select
                 value={statusFilter}
                 onChange={e => setStatusFilter(e.target.value)}
-                className="rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] px-3 py-1.5 text-xs text-[#2B1F1D] focus:outline-none"
+                className="rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] px-3 py-1.5 text-xs text-[#2B1F1D] focus:outline-none font-semibold"
               >
                 <option value="ALL">All Statuses</option>
-                <option value="RECEIVED">Received</option>
-                <option value="UNDER_REVIEW">Under Review</option>
-                <option value="INVESTIGATING">Investigating</option>
-                <option value="PATROL_ASSIGNED">Patrol Dispatched</option>
+                <option value="ALERT_RECEIVED">Alert Received</option>
+                <option value="REVIEWING">Reviewing</option>
+                <option value="PATROL_ASSIGNED">Patrol Assigned</option>
+                <option value="RESPONDING">Responding</option>
+                <option value="ARRIVED">Arrived</option>
                 <option value="RESOLVED">Resolved</option>
               </select>
 
@@ -353,9 +650,21 @@ export const PoliceDashboardPage: React.FC = () => {
           </div>
 
           {/* Incident Cards */}
-          {isLoading ? (
+          {fetchError ? (
+            <div className="rounded-3xl border border-red-300 bg-red-50/70 p-10 text-center space-y-3">
+              <AlertTriangle className="h-8 w-8 text-red-600 mx-auto" />
+              <p className="text-sm font-bold text-red-900">Failed to load incident feed</p>
+              <p className="text-xs text-red-700">{fetchError}</p>
+              <button
+                onClick={() => fetchIncidents()}
+                className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition-all cursor-pointer shadow-sm"
+              >
+                Retry Loading Feed
+              </button>
+            </div>
+          ) : isLoading ? (
             <div className="rounded-3xl border border-[#EEDFD9] bg-[#FFFDFC] p-12 text-center text-xs text-[#7A6360]">
-              Loading incident reports from MongoDB...
+              Loading live emergency incident feed from Police Database...
             </div>
           ) : incidents.length === 0 ? (
             <div className="rounded-3xl border border-[#EEDFD9] bg-[#FFFDFC] p-12 text-center text-xs text-[#7A6360]">
@@ -366,10 +675,11 @@ export const PoliceDashboardPage: React.FC = () => {
               {incidents.map((inc: any) => (
                 <div
                   key={inc.report_code || inc.id}
-                  className="rounded-3xl border border-[#EEDFD9] bg-[#FFFDFC] p-6 shadow-warm-xs space-y-4 hover:border-[#883A2E]/40 transition-all"
+                  onClick={() => handleInspectReport(inc.report_code)}
+                  className="rounded-3xl border border-[#EEDFD9] bg-[#FFFDFC] p-6 shadow-warm-xs space-y-4 hover:border-[#883A2E]/40 transition-all cursor-pointer"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[#EEDFD9] pb-3">
-                    <div className="flex items-center space-x-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-xs font-bold text-[#883A2E] bg-[#FAF0EC] px-2.5 py-1 rounded-lg border border-[#EEDFD9]">
                         {inc.report_code}
                       </span>
@@ -381,14 +691,15 @@ export const PoliceDashboardPage: React.FC = () => {
                       }`}>
                         {inc.severity}
                       </span>
+                      {getCitizenTrackingBadge(inc)}
                     </div>
 
                     <div className="flex items-center space-x-2">
                       <span className="text-[11px] font-semibold text-[#7A6360]">
                         Status: <span className="text-[#883A2E] uppercase font-bold">{inc.status}</span>
                       </span>
-                      <span className="text-[11px] text-[#7A6360]">
-                        {new Date(inc.created_at || inc.createdAt).toLocaleString()}
+                      <span className="text-[11px] font-semibold text-[#883A2E] bg-[#FAF0EC] px-2 py-0.5 rounded border border-[#EEDFD9]">
+                        {formatISTDateTime(inc.created_at || inc.reported_at || inc.createdAt)}
                       </span>
                     </div>
                   </div>
@@ -429,26 +740,47 @@ export const PoliceDashboardPage: React.FC = () => {
 
                   {/* Attached Media (Photo & Voice Audio) */}
                   {(inc.photo_url || inc.audio_url) && (
-                    <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFF7F4] p-3.5 flex flex-wrap items-center gap-4">
+                    <div className="rounded-2xl border border-[#EEDFD9] bg-[#FFF7F4] p-3.5 space-y-3">
                       {inc.photo_url && (
-                        <div className="flex items-center space-x-2">
-                          <Camera className="h-4 w-4 text-[#883A2E]" />
-                          <a
-                            href={api.getMediaUrl(inc.photo_url)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-xs font-semibold text-[#883A2E] hover:underline"
-                          >
-                            View Evidence Photo
-                          </a>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-xs font-bold text-[#883A2E]">
+                            <span className="flex items-center gap-1.5">
+                              <Camera className="h-4 w-4" />
+                              <span>Citizen Photo Evidence</span>
+                            </span>
+                            <a
+                              href={api.getMediaUrl(inc.photo_url)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[11px] font-semibold underline hover:text-[#542A20]"
+                            >
+                              Open Image ↗
+                            </a>
+                          </div>
+                          <div className="relative rounded-xl border border-[#EEDFD9] overflow-hidden bg-black/5 max-w-sm">
+                            <img
+                              src={api.getMediaUrl(inc.photo_url)}
+                              alt="Incident Evidence"
+                              className="max-h-48 w-full object-cover rounded-lg hover:opacity-95 cursor-pointer transition-opacity"
+                              onError={(e) => {
+                                const target = e.currentTarget;
+                                target.onerror = null;
+                                target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="%237A6360" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>';
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(api.getMediaUrl(inc.photo_url), '_blank');
+                              }}
+                            />
+                          </div>
                         </div>
                       )}
                       {inc.audio_url && (
-                        <div className="flex items-center space-x-2 flex-1 min-w-[200px]">
+                        <div className="pt-1" onClick={(e) => e.stopPropagation()}>
                           <IncidentAudioPlayer
                             src={inc.audio_url}
                             duration={inc.audio_duration}
-                            label="Audio Statement"
+                            label="Citizen Emergency Voice Recording"
                           />
                         </div>
                       )}
@@ -480,29 +812,93 @@ export const PoliceDashboardPage: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Action Controls */}
-                  <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-[#EEDFD9]">
-                    <button
-                      onClick={() => {
-                        setSelectedIncident(inc);
-                        setNewStatus(inc.status);
-                        setOfficerNotes(inc.officer_notes || '');
-                      }}
-                      className="px-3.5 py-1.5 rounded-xl border border-[#EEDFD9] bg-[#FFFDFC] text-xs font-semibold text-[#2B1F1D] hover:bg-[#FAF0EC] cursor-pointer shadow-sm transition-all"
-                    >
-                      Update Status & Notes
-                    </button>
+                  {/* Action Controls for Response Tracking Milestones */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#EEDFD9]" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {/* Step 1: Mark Viewed */}
+                      {(!inc.viewed_at && !JSON.stringify(inc.status_timeline || []).includes('VIEWED')) && (
+                        <button
+                          onClick={() => handleInspectReport(inc.report_code)}
+                          className="px-3 py-1.5 rounded-xl bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 transition-all cursor-pointer"
+                        >
+                          👁️ Mark Viewed
+                        </button>
+                      )}
 
-                    <button
-                      onClick={() => {
-                        setDispatchIncident(inc);
-                        setDispatchNotes('');
-                      }}
-                      className="px-3.5 py-1.5 rounded-xl bg-[#542A20] text-white text-xs font-semibold hover:bg-[#3D1F17] cursor-pointer shadow-sm transition-all flex items-center space-x-1.5"
-                    >
-                      <Truck className="h-3.5 w-3.5" />
-                      <span>Dispatch Patrol</span>
-                    </button>
+                      {/* Step 2: Acknowledge */}
+                      {(inc.status === 'ALERT_RECEIVED' || inc.status === 'RECEIVED' || inc.status === 'INCIDENT_REPORTED' || inc.status === 'VIEWED' || inc.status === 'VIEWED_BY_OFFICER') && (
+                        <button
+                          onClick={() => handleQuickStatusUpdate(inc.report_code, 'ACKNOWLEDGED', 'Police officer acknowledged and reviewing incident.')}
+                          className="px-3 py-1.5 rounded-xl bg-[#883A2E] text-white text-xs font-bold hover:bg-[#542A20] transition-all cursor-pointer"
+                        >
+                          ✓ Acknowledge Alert
+                        </button>
+                      )}
+
+                      {/* Step 3: Assign Patrol */}
+                      {(inc.status === 'ACKNOWLEDGED' || inc.status === 'REVIEWING' || (!inc.patrol_assignment && inc.status !== 'RESOLVED')) && (
+                        <button
+                          onClick={() => setDispatchIncident(inc)}
+                          className="px-3 py-1.5 rounded-xl bg-[#D65A31] text-white text-xs font-bold hover:bg-[#C47A5A] transition-all cursor-pointer"
+                        >
+                          Assign Patrol Unit
+                        </button>
+                      )}
+
+                      {/* Step 4: Responding / En Route */}
+                      {(inc.status === 'PATROL_ASSIGNED' || inc.status === 'OFFICER_ASSIGNED') && (
+                        <button
+                          onClick={() => handleQuickStatusUpdate(inc.report_code, 'EN_ROUTE', 'Patrol unit dispatched and en route to location.')}
+                          className="px-3 py-1.5 rounded-xl bg-purple-700 text-white text-xs font-bold hover:bg-purple-800 transition-all cursor-pointer"
+                        >
+                          📍 Dispatch / En Route
+                        </button>
+                      )}
+
+                      {/* Step 5: Arrived */}
+                      {(inc.status === 'RESPONDING' || inc.status === 'PATROL_EN_ROUTE' || inc.status === 'EN_ROUTE') && (
+                        <button
+                          onClick={() => handleQuickStatusUpdate(inc.report_code, 'ARRIVED', 'Police patrol arrived at incident location.')}
+                          className="px-3 py-1.5 rounded-xl bg-[#2E7D32] text-white text-xs font-bold hover:bg-emerald-800 transition-all cursor-pointer"
+                        >
+                          ✓ Mark Arrived
+                        </button>
+                      )}
+
+                      {/* Step 6: Resolved */}
+                      {inc.status !== 'RESOLVED' && inc.status !== 'CLOSED' && (
+                        <button
+                          onClick={() => handleQuickStatusUpdate(inc.report_code, 'RESOLVED', 'Incident resolved by police response unit.')}
+                          className="px-3 py-1.5 rounded-xl border border-[#2E7D32]/40 bg-[#2E7D32]/10 text-[#2E7D32] text-xs font-bold hover:bg-[#2E7D32] hover:text-white transition-all cursor-pointer"
+                        >
+                          ✅ Resolve Incident
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => {
+                          setSelectedIncident(inc);
+                          setNewStatus(inc.status);
+                          setOfficerNotes(inc.officer_notes || '');
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl border border-[#EEDFD9] bg-[#FFFDFC] text-xs font-semibold text-[#2B1F1D] hover:bg-[#FAF0EC] cursor-pointer shadow-sm transition-all"
+                      >
+                        All Statuses & Notes
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setDispatchIncident(inc);
+                          setDispatchNotes('');
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-[#542A20] text-white text-xs font-semibold hover:bg-[#3D1F17] cursor-pointer shadow-sm transition-all flex items-center space-x-1.5"
+                      >
+                        <Truck className="h-3.5 w-3.5" />
+                        <span>Dispatch</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -582,11 +978,12 @@ export const PoliceDashboardPage: React.FC = () => {
                   onChange={e => setNewStatus(e.target.value)}
                   className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] px-3.5 py-2.5 text-xs text-[#2B1F1D] focus:border-[#883A2E] focus:outline-none"
                 >
-                  <option value="UNDER_REVIEW">UNDER REVIEW (Initial Assessment)</option>
-                  <option value="INVESTIGATING">INVESTIGATING (Officer Assigned)</option>
-                  <option value="PATROL_ASSIGNED">PATROL ASSIGNED (Dispatched)</option>
+                  <option value="ALERT_RECEIVED">ALERT RECEIVED (Initial Alert)</option>
+                  <option value="REVIEWING">REVIEWING (Command Review)</option>
+                  <option value="PATROL_ASSIGNED">PATROL ASSIGNED (Unit Dispatched)</option>
+                  <option value="RESPONDING">RESPONDING (En Route to Scene)</option>
+                  <option value="ARRIVED">ARRIVED (Unit On Scene)</option>
                   <option value="RESOLVED">RESOLVED (Case Concluded)</option>
-                  <option value="CLOSED">CLOSED (Archived)</option>
                 </select>
               </div>
 

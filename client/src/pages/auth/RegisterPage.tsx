@@ -168,7 +168,7 @@ export const RegisterPage: React.FC = () => {
           <p className="text-xs text-[#7A6360]">
             {pendingVerification
               ? `We have sent a 6-digit OTP verification code to ${email}`
-              : 'Register for a verified Crimelytixs Citizen user account'}
+              : 'Register for a verified CrimeLytixs Citizen user account'}
           </p>
         </div>
 

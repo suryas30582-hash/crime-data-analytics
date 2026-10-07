@@ -8,7 +8,14 @@ import { DatasetProvider } from './context/DatasetContext';
 import { App } from './App';
 import './index.css';
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_d2Vsa29tZS1zbmFpbC0zOC5jbGVyay5hY2NvdW50cy5kZXYk';
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string;
+if (!PUBLISHABLE_KEY) {
+  throw new Error(
+    '[CrimeLytixs] VITE_CLERK_PUBLISHABLE_KEY is not set. ' +
+    'Set it in your .env (dev) or deployment environment variables (production). ' +
+    'Use pk_live_... for production, pk_test_... for development only.'
+  );
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
