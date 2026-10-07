@@ -5,11 +5,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://crime-data-analytics-1.onrender.com/api/:path*"
+      "destination": "https://crime-data-analytics-api.onrender.com/api/:path*"
     },
     {
       "source": "/uploads/:path*",
-      "destination": "https://crime-data-analytics-1.onrender.com/uploads/:path*"
+      "destination": "https://crime-data-analytics-api.onrender.com/uploads/:path*"
     },
     {
       "source": "/(.*)",
@@ -17,3 +17,4 @@
     }
   ]
 }
+
