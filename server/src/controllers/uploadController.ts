@@ -7,6 +7,7 @@ import { AuthRequest } from '../middleware/auth';
 
 import { CrimeRecord } from '../types';
 import { getDistrictForCity } from '../db/seed';
+import { broadcastEmergencyEvent } from './emergencyController';
 
 const REQUIRED_COLUMNS = [
   'Crime_ID',
@@ -331,6 +332,11 @@ export function commitImport(req: AuthRequest, res: Response) {
     db.prepare('INSERT INTO audit_logs (user_id, action, details) VALUES (?, ?, ?)')
       .run(req.user?.id || 'anonymous', 'IMPORT_DATASET', `Imported ${records.length} records into dataset ${activeDatasetId}`);
 
+    broadcastEmergencyEvent('NEW_DATASET_UPLOADED', {
+      datasetId: activeDatasetId,
+      name: datasetObj?.name || 'Uploaded Dataset',
+      record_count: totalInDataset
+    });
 
     return res.json({
       success: true,

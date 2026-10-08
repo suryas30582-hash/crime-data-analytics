@@ -185,9 +185,31 @@ export function seedDatabase() {
     }
   };
 
+  // Helper to find dataset file across potential relative locations
+  const findDatasetFile = (filename: string, fallbackWindowsPath?: string): string => {
+    const candidates = [
+      path.resolve(__dirname, '../data/seed_datasets', filename),
+      path.resolve(__dirname, '../../src/data/seed_datasets', filename),
+      path.resolve(__dirname, '../../data/seed_datasets', filename),
+      path.resolve(process.cwd(), 'server/src/data/seed_datasets', filename),
+      path.resolve(process.cwd(), 'src/data/seed_datasets', filename),
+      fallbackWindowsPath
+    ].filter(Boolean) as string[];
+
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        return p;
+      }
+    }
+    return '';
+  };
+
   // 1. Ingest India Dataset
-  const indiaPath = path.resolve('c:/Users/surya/OneDrive/Desktop/crime_data_set/India_Crime_Data_Analytics_2026_2027_2000_Rows (1).xlsx');
-  const indiaRows = parseExcelFile(indiaPath);
+  const indiaPath = findDatasetFile(
+    'india_crime_data.xlsx',
+    'c:/Users/surya/OneDrive/Desktop/crime_data_set/India_Crime_Data_Analytics_2026_2027_2000_Rows (1).xlsx'
+  );
+  const indiaRows = indiaPath ? parseExcelFile(indiaPath) : [];
 
   if (indiaRows.length > 0) {
     const records: CrimeRecord[] = indiaRows.map((row, idx) => {
@@ -236,8 +258,11 @@ export function seedDatabase() {
   }
 
   // 2. Ingest Tamil Nadu Dataset
-  const tnPath = path.resolve('c:/Users/surya/OneDrive/Desktop/Crime_Data_Analytics/cleaned_crime_data.xlsx');
-  const tnRows = parseExcelFile(tnPath);
+  const tnPath = findDatasetFile(
+    'tamil_nadu_crime_data.xlsx',
+    'c:/Users/surya/OneDrive/Desktop/Crime_Data_Analytics/cleaned_crime_data.xlsx'
+  );
+  const tnRows = tnPath ? parseExcelFile(tnPath) : [];
 
   if (tnRows.length > 0) {
     const records: CrimeRecord[] = tnRows.map((row, idx) => {

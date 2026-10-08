@@ -156,8 +156,13 @@ export function streamEmergencyEvents(req: Request, res: Response) {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',
     'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
     'Access-Control-Allow-Origin': '*'
   });
+
+  if (typeof (res as any).flushHeaders === 'function') {
+    (res as any).flushHeaders();
+  }
 
   res.write(': connected\n\n');
   sseClients.push(res);
@@ -167,16 +172,24 @@ export function streamEmergencyEvents(req: Request, res: Response) {
       res.write(': ping\n\n');
     } catch {
       clearInterval(keepAlive);
+      const idx = sseClients.indexOf(res);
+      if (idx !== -1) {
+        sseClients.splice(idx, 1);
+      }
     }
-  }, 25000);
+  }, 15000);
 
-  req.on('close', () => {
+  const cleanup = () => {
     clearInterval(keepAlive);
     const idx = sseClients.indexOf(res);
     if (idx !== -1) {
       sseClients.splice(idx, 1);
     }
-  });
+  };
+
+  req.on('close', cleanup);
+  res.on('close', cleanup);
+  res.on('error', cleanup);
 }
 
 /**
