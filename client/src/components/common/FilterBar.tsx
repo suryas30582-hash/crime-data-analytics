@@ -17,6 +17,9 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   showStatus = false
 }) => {
   const {
+    datasets,
+    activeDatasetId,
+    setActiveDatasetId,
     filters,
     updateFilter,
     resetFilters,
@@ -64,7 +67,26 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+        {/* Dataset Selector */}
+        {datasets.length > 0 && (
+          <div>
+            <label className="mb-1 block text-[11px] font-semibold text-[#7A6360]">
+              Active Dataset
+            </label>
+            <select
+              value={activeDatasetId || ''}
+              onChange={e => setActiveDatasetId(e.target.value)}
+              className="w-full rounded-xl border border-[#EEDFD9] bg-[#FFF7F4] px-3 py-2 text-xs font-semibold text-[#883A2E] focus:border-[#883A2E] focus:bg-[#FFFDFC] focus:outline-none focus:ring-1 focus:ring-[#883A2E]/30"
+            >
+              {datasets.map(d => (
+                <option key={d.id} value={d.id}>
+                  {d.name} ({d.actual_record_count || d.record_count || 0} rows)
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {/* Search Bar */}
         {showSearch && (
           <div className="col-span-1 sm:col-span-2 md:col-span-1">

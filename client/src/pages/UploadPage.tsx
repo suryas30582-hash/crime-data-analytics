@@ -86,13 +86,13 @@ export const UploadPage: React.FC = () => {
       });
 
       setImportSuccess(res.message);
-      await refreshDatasets();
+      await refreshDatasets(res.datasetId);
       setActiveDatasetId(res.datasetId);
 
-      // Auto redirect after 2.5s to user's primary dashboard
+      // Auto redirect after 1.5s to analytics dashboard with newly active dataset
       setTimeout(() => {
-        navigate(getRoleDashboardRoute());
-      }, 2500);
+        navigate('/dashboard');
+      }, 1500);
     } catch (err: any) {
       setImportError(err.message || 'Import failed. Please verify the dataset structure.');
     } finally {

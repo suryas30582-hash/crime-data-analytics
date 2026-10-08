@@ -17,7 +17,7 @@ interface DatasetContextType {
   availableYears: number[];
   availableCrimeTypes: string[];
   isLoadingLocations: boolean;
-  refreshDatasets: () => Promise<void>;
+  refreshDatasets: (targetId?: string) => Promise<any>;
 }
 
 const initialFilters: FilterState = {
@@ -55,29 +55,7 @@ export const DatasetProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [availableCrimeTypes, setAvailableCrimeTypes] = useState<string[]>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState<boolean>(false);
 
-  const loadDatasets = useCallback(async () => {
-    try {
-      const res = await api.getDatasets();
-      setDatasets(res.datasets);
-      if (res.datasets.length > 0) {
-        const savedId = localStorage.getItem('crime_active_dataset_id') || activeDatasetId;
-        const exists = res.datasets.some(d => d.id === savedId);
-        const targetId = exists ? savedId : res.datasets[0].id;
-        if (targetId !== activeDatasetId) {
-          setActiveDatasetIdState(targetId);
-          setFilters(prev => ({ ...prev, datasetId: targetId }));
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load datasets:', err);
-    }
-  }, [activeDatasetId]);
-
-  useEffect(() => {
-    loadDatasets();
-  }, [loadDatasets]);
-
-  const setActiveDatasetId = (id: string) => {
+  const setActiveDatasetId = useCallback((id: string) => {
     try {
       localStorage.setItem('crime_active_dataset_id', id);
     } catch (e) {
@@ -88,7 +66,28 @@ export const DatasetProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ...initialFilters,
       datasetId: id
     });
-  };
+  }, []);
+
+  const loadDatasets = useCallback(async (forceSelectId?: string) => {
+    try {
+      const res = await api.getDatasets();
+      setDatasets(res.datasets);
+      if (res.datasets.length > 0) {
+        const savedId = forceSelectId || localStorage.getItem('crime_active_dataset_id') || activeDatasetId;
+        const exists = res.datasets.some(d => d.id === savedId);
+        const targetId = exists ? savedId : res.datasets[0].id;
+        setActiveDatasetId(targetId);
+      }
+      return res.datasets;
+    } catch (err) {
+      console.error('Failed to load datasets:', err);
+      return [];
+    }
+  }, [activeDatasetId, setActiveDatasetId]);
+
+  useEffect(() => {
+    loadDatasets();
+  }, []);
 
   // Real-time synchronization: listen for newly uploaded datasets across all roles
   useEffect(() => {
@@ -99,9 +98,10 @@ export const DatasetProvider: React.FC<{ children: React.ReactNode }> = ({ child
         try {
           const payload = JSON.parse(e.data);
           console.log('[DatasetContext] Live central dataset update received:', payload);
-          loadDatasets();
           if (payload.datasetId) {
-            setActiveDatasetId(payload.datasetId);
+            loadDatasets(payload.datasetId);
+          } else {
+            loadDatasets();
           }
         } catch (err) {
           console.warn('Failed to parse NEW_DATASET_UPLOADED event', err);
@@ -113,9 +113,8 @@ export const DatasetProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'crime_active_dataset_id' && e.newValue && e.newValue !== activeDatasetId) {
-        setActiveDatasetIdState(e.newValue);
-        setFilters(prev => ({ ...prev, datasetId: e.newValue! }));
-        loadDatasets();
+        setActiveDatasetId(e.newValue);
+        loadDatasets(e.newValue);
       }
     };
 
@@ -125,7 +124,7 @@ export const DatasetProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (eventSource) eventSource.close();
       window.removeEventListener('storage', handleStorageChange);
     };
-  }, [activeDatasetId, loadDatasets]);
+  }, [activeDatasetId, loadDatasets, setActiveDatasetId]);
 
   // Load Available Years for the active dataset
   useEffect(() => {

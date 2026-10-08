@@ -282,9 +282,11 @@ export function getLocationHierarchy(req: Request, res: Response) {
     let states: string[] = [];
     if (datasetId === 'ds_tamil_nadu') {
       states = ['Tamil Nadu'];
-    } else {
+    } else if (datasetId === 'ds_india_all') {
       const allStatesSet = new Set<string>([...Object.keys(INDIA_LOCATION_MASTER), ...dbStates]);
       states = Array.from(allStatesSet).sort();
+    } else {
+      states = dbStates;
     }
 
     // 2. Districts Selection
@@ -297,20 +299,26 @@ export function getLocationHierarchy(req: Request, res: Response) {
 
     let districts: string[] = [];
     if (state && state !== 'All') {
-      const masterDistricts = INDIA_LOCATION_MASTER[state] ? Object.keys(INDIA_LOCATION_MASTER[state]) : [];
       const dbMatched = dbDistricts.filter(d => d.state === state).map(d => d.district);
-      districts = Array.from(new Set([...masterDistricts, ...dbMatched])).sort();
+      if (datasetId === 'ds_india_all') {
+        const masterDistricts = INDIA_LOCATION_MASTER[state] ? Object.keys(INDIA_LOCATION_MASTER[state]) : [];
+        districts = Array.from(new Set([...masterDistricts, ...dbMatched])).sort();
+      } else {
+        districts = Array.from(new Set(dbMatched)).sort();
+      }
     } else if (datasetId === 'ds_tamil_nadu') {
       const tnDistricts = Object.keys(INDIA_LOCATION_MASTER['Tamil Nadu'] || {});
       const dbMatched = dbDistricts.map(d => d.district);
       districts = Array.from(new Set([...tnDistricts, ...dbMatched])).sort();
-    } else {
+    } else if (datasetId === 'ds_india_all') {
       const allMasterDistricts: string[] = [];
       Object.values(INDIA_LOCATION_MASTER).forEach(stateObj => {
         allMasterDistricts.push(...Object.keys(stateObj));
       });
       const dbMatched = dbDistricts.map(d => d.district);
       districts = Array.from(new Set([...allMasterDistricts, ...dbMatched])).sort();
+    } else {
+      districts = Array.from(new Set(dbDistricts.map(d => d.district))).sort();
     }
 
     // 3. Cities Selection
@@ -322,7 +330,16 @@ export function getLocationHierarchy(req: Request, res: Response) {
     `).all(datasetId) as { city: string; district: string; state: string }[];
 
     let cities: string[] = [];
-    if (district && district !== 'All') {
+    if (datasetId !== 'ds_india_all' && datasetId !== 'ds_tamil_nadu') {
+      let filtered = dbCities;
+      if (state && state !== 'All') {
+        filtered = filtered.filter(c => c.state === state);
+      }
+      if (district && district !== 'All') {
+        filtered = filtered.filter(c => c.district === district);
+      }
+      cities = Array.from(new Set(filtered.map(c => c.city))).sort();
+    } else if (district && district !== 'All') {
       const masterCities: string[] = [];
       if (state && state !== 'All' && INDIA_LOCATION_MASTER[state]?.[district]) {
         masterCities.push(...INDIA_LOCATION_MASTER[state][district]);
