@@ -27,7 +27,7 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-import { validateSupabaseConfig, ensureStorageBuckets } from './db/supabase';
+import { validateSupabaseConfig, ensureStorageBuckets, isSupabaseConfigured, supabase } from './db/supabase';
 
 // Initialize DB and Seed preloaded Excel datasets
 initDatabase();
@@ -44,7 +44,13 @@ app.use('/api', apiRouter);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'healthy',
+    version: '2026-10-11-v3',
+    timestamp: new Date().toISOString(),
+    supabaseConfigured: isSupabaseConfigured(),
+    hasSupabaseClient: Boolean(supabase)
+  });
 });
 
 // Serve uploaded media with correct MIME headers & byte ranges for browser image/audio playback
