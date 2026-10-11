@@ -9,9 +9,14 @@ import path from 'path';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-const supabaseUrl = (process.env.SUPABASE_URL || '').trim();
-const supabaseServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-const supabaseAnonKey = (process.env.SUPABASE_ANON_KEY || '').trim();
+// Dedicated project Supabase credentials (used as backend default if not injected into process.env by host)
+const DEFAULT_SUPABASE_URL = 'https://hetjmadzbkhcchjizgid.supabase.co';
+const DEFAULT_SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhldGptYWR6YmtoY2Noaml6Z2lkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDQ3NzYzMCwiZXhwIjoyMTA2MDUzNjMwfQ.Qd1r1w3z7TMdpT8eMHSzDGzK872artvfdqbexWy_05w';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhldGptYWR6YmtoY2Noaml6Z2lkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0Nzc2MzAsImV4cCI6MjEwNjA1MzYzMH0.MSi0RBn3U7c_sqIDfROm986-haXxzM2Vn5ReUllsUfE';
+
+const supabaseUrl = (process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).trim();
+const supabaseServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_SERVICE_ROLE_KEY).trim();
+const supabaseAnonKey = (process.env.SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY).trim();
 
 // On backend, prioritize service role key for full administrative bypass of RLS and storage bucket creation
 const effectiveKey = supabaseServiceKey || supabaseAnonKey;
