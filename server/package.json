@@ -7,7 +7,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "seed": "tsx src/db/seed.ts"
+    "seed": "tsx src/db/seed.ts",
+    "test:media": "node scripts/test_emergency_media_e2e.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

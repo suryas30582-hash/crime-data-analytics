@@ -503,8 +503,16 @@ export const PoliceDashboardPage: React.FC = () => {
                       className="h-28 w-full object-cover rounded-lg border border-white/20 cursor-pointer hover:opacity-90"
                       onError={(e) => {
                         const target = e.currentTarget;
-                        target.onerror = null;
-                        target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="%237A6360" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>';
+                        const mediaUrl = api.getMediaUrl(alarm.photo_url);
+                        console.error('[PoliceDashboard] Failed to load alarm photo evidence:', mediaUrl);
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent && !parent.querySelector('.photo-error-badge')) {
+                          const errDiv = document.createElement('div');
+                          errDiv.className = 'photo-error-badge p-2.5 rounded-lg bg-black/40 border border-rose-400/40 text-xs text-rose-200 flex items-center justify-between gap-2';
+                          errDiv.innerHTML = '<span>⚠️ Evidence image load failed</span><a href="' + mediaUrl + '" target="_blank" rel="noreferrer" class="underline text-white font-bold hover:text-rose-200">Open Direct Link ↗</a>';
+                          parent.appendChild(errDiv);
+                        }
                       }}
                       onClick={() => window.open(api.getMediaUrl(alarm.photo_url), '_blank')}
                     />
@@ -764,8 +772,16 @@ export const PoliceDashboardPage: React.FC = () => {
                               className="max-h-48 w-full object-cover rounded-lg hover:opacity-95 cursor-pointer transition-opacity"
                               onError={(e) => {
                                 const target = e.currentTarget;
-                                target.onerror = null;
-                                target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="%237A6360" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>';
+                                const mediaUrl = api.getMediaUrl(inc.photo_url);
+                                console.error('[PoliceDashboard] Failed to load incident photo evidence:', mediaUrl);
+                                target.style.display = 'none';
+                                const parent = target.parentElement;
+                                if (parent && !parent.querySelector('.photo-error-badge')) {
+                                  const errDiv = document.createElement('div');
+                                  errDiv.className = 'photo-error-badge p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800 space-y-1';
+                                  errDiv.innerHTML = '<div class="font-bold flex items-center gap-1">⚠️ Photo evidence failed to load</div><div class="text-[11px] text-rose-600 break-all font-mono">' + mediaUrl + '</div><a href="' + mediaUrl + '" target="_blank" rel="noreferrer" class="inline-block text-[11px] font-bold text-[#883A2E] underline mt-1">Open Direct Link ↗</a>';
+                                  parent.appendChild(errDiv);
+                                }
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();

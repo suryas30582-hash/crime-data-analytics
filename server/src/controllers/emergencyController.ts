@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../db/schema';
 import { autoDispatchNearestPatrol, calculateHaversineDistance, calculateDynamicETA } from '../services/dispatchService';
 
-import { uploadToSupabaseStorage } from '../db/supabase';
+import { uploadToSupabaseStorage, deleteFromSupabaseStorage, isSupabaseConfigured } from '../db/supabase';
 import {
   syncEmergencyReportToSupabase,
   syncPatrolAssignmentToSupabase,
@@ -12,11 +12,50 @@ import {
 import path from 'path';
 import fs from 'fs';
 
-
 // Setup uploads directory for emergency media
 const uploadsDir = path.resolve(__dirname, '../../../uploads/emergency');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+function isValidImageMimeOrExt(mimetype?: string, filename?: string): boolean {
+  const validMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml', 'image/bmp', 'image/avif'];
+  if (mimetype && validMimes.includes(mimetype.toLowerCase())) return true;
+  if (mimetype && mimetype.startsWith('image/')) return true;
+  if (filename) {
+    const ext = path.extname(filename).toLowerCase();
+    if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.svg', '.avif'].includes(ext)) return true;
+  }
+  return false;
+}
+
+function getSafeImageExtension(mimetype?: string, originalName?: string): string {
+  const ext = originalName ? path.extname(originalName).toLowerCase() : '';
+  if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif'].includes(ext)) return ext === '.jpeg' ? '.jpg' : ext;
+  if (mimetype?.includes('png')) return '.png';
+  if (mimetype?.includes('webp')) return '.webp';
+  if (mimetype?.includes('gif')) return '.gif';
+  return '.jpg';
+}
+
+function getAudioDetails(file: Express.Multer.File): { ext: string; contentType: string } {
+  const mime = (file.mimetype || '').toLowerCase();
+  let ext = path.extname(file.originalname).toLowerCase();
+  if (!ext || ext === '.blob') {
+    if (mime.includes('mp4') || mime.includes('m4a')) ext = '.mp4';
+    else if (mime.includes('aac')) ext = '.aac';
+    else if (mime.includes('ogg')) ext = '.ogg';
+    else if (mime.includes('wav')) ext = '.wav';
+    else if (mime.includes('mpeg') || mime.includes('mp3')) ext = '.mp3';
+    else ext = '.webm';
+  }
+  let contentType = 'audio/webm';
+  if (ext === '.mp4' || mime.includes('mp4')) contentType = 'audio/mp4';
+  else if (ext === '.aac' || mime.includes('aac')) contentType = 'audio/aac';
+  else if (ext === '.ogg' || mime.includes('ogg')) contentType = 'audio/ogg';
+  else if (ext === '.wav' || mime.includes('wav')) contentType = 'audio/wav';
+  else if (ext === '.mp3' || mime.includes('mpeg') || mime.includes('mp3')) contentType = 'audio/mpeg';
+  return { ext, contentType };
 }
 
 // In-Memory SSE Client Pool
@@ -206,64 +245,136 @@ export async function createReport(req: Request, res: Response) {
 
     let photo_url: string | null = null;
     let audio_url: string | null = null;
+    let uploadedPhotoKey: string | null = null;
+    let uploadedAudioKey: string | null = null;
+    const isProduction = process.env.NODE_ENV === 'production';
 
+    // Safe Diagnostic Inbound Logging (never logs secrets or raw media)
+    const hasPhoto = Boolean(files?.['photo']?.[0]) || Boolean(body.photo_base64);
+    const hasAudio = Boolean(files?.['audio']?.[0]) || Boolean(body.audio_base64);
+    const photoSize = files?.['photo']?.[0]?.size ?? (body.photo_base64 ? body.photo_base64.length : 0);
+    const audioSize = files?.['audio']?.[0]?.size ?? (body.audio_base64 ? body.audio_base64.length : 0);
+    const photoMime = files?.['photo']?.[0]?.mimetype || (body.photo_base64 ? 'base64' : 'none');
+    const audioMime = files?.['audio']?.[0]?.mimetype || (body.audio_base64 ? 'base64' : 'none');
+    console.log(`[Emergency SOS Diagnostic] Inbound report ${report_code} | Photo: ${hasPhoto ? `${photoSize}b (${photoMime})` : 'none'} | Audio: ${hasAudio ? `${audioSize}b (${audioMime})` : 'none'} | Duration: ${body.audio_duration || 'none'}`);
+
+
+    // 1. Photo Upload Handling
     if (files && files['photo'] && files['photo'][0]) {
       const photoFile = files['photo'][0];
-      const ext = path.extname(photoFile.originalname) || '.jpg';
-      const filename = `photo_${report_code}_${Date.now()}${ext}`;
+      if (!isValidImageMimeOrExt(photoFile.mimetype, photoFile.originalname)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Uploaded photo must be a valid image file (JPEG, PNG, WebP, GIF).'
+        });
+      }
 
-      // Always upload to Supabase Storage first (persistent cloud URL)
-      const sbUrl = await uploadToSupabaseStorage('emergency-images', filename, photoFile.buffer, photoFile.mimetype || 'image/jpeg');
+      const ext = getSafeImageExtension(photoFile.mimetype, photoFile.originalname);
+      const safeRandom = Math.random().toString(36).slice(2, 8);
+      const filename = `photo_${report_code}_${Date.now()}_${safeRandom}${ext}`;
+      const contentType = photoFile.mimetype || (ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg');
+
+      // Upload to Supabase Storage
+      const sbUrl = await uploadToSupabaseStorage('emergency-images', filename, photoFile.buffer, contentType);
       if (sbUrl) {
         photo_url = sbUrl;
+        uploadedPhotoKey = filename;
       } else {
-        // Supabase upload failed — write local fallback for dev, but DO NOT store local path in DB for production
-        try { fs.writeFileSync(path.join(uploadsDir, filename), photoFile.buffer); } catch (_) {}
-        console.warn(`[Photo] Supabase upload failed for ${filename}. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars. photo_url will be null.`);
-        photo_url = null;
+        if (isProduction) {
+          console.error(`[Photo Upload] Failed to persist emergency photo to Supabase in production: ${filename}`);
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to persist emergency photo to cloud storage. Incident report not submitted.'
+          });
+        }
+        // Local dev fallback
+        try {
+          fs.writeFileSync(path.join(uploadsDir, filename), photoFile.buffer);
+          photo_url = `/uploads/emergency/${filename}`;
+          console.log(`[Photo Local Dev Fallback] Persisted to /uploads/emergency/${filename}`);
+        } catch (localErr: any) {
+          console.error('[Photo Local Write Failed]:', localErr);
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to write emergency photo to local storage.'
+          });
+        }
       }
     } else if (body.photo_base64) {
       try {
         const matches = body.photo_base64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         if (matches && matches.length === 3) {
+          const mime = matches[1];
+          if (!isValidImageMimeOrExt(mime)) {
+            return res.status(400).json({ success: false, error: 'Invalid base64 photo MIME type.' });
+          }
           const buffer = Buffer.from(matches[2], 'base64');
-          const filename = `photo_${report_code}_${Date.now()}.jpg`;
+          const ext = getSafeImageExtension(mime);
+          const safeRandom = Math.random().toString(36).slice(2, 8);
+          const filename = `photo_${report_code}_${Date.now()}_${safeRandom}${ext}`;
 
-          const sbUrl = await uploadToSupabaseStorage('emergency-images', filename, buffer, 'image/jpeg');
+          const sbUrl = await uploadToSupabaseStorage('emergency-images', filename, buffer, mime || 'image/jpeg');
           if (sbUrl) {
             photo_url = sbUrl;
+            uploadedPhotoKey = filename;
           } else {
-            try { fs.writeFileSync(path.join(uploadsDir, filename), buffer); } catch (_) {}
-            console.warn(`[Photo base64] Supabase upload failed for ${filename}. photo_url will be null.`);
-            photo_url = null;
+            if (isProduction) {
+              return res.status(500).json({
+                success: false,
+                error: 'Failed to persist base64 emergency photo to cloud storage.'
+              });
+            }
+            try {
+              fs.writeFileSync(path.join(uploadsDir, filename), buffer);
+              photo_url = `/uploads/emergency/${filename}`;
+            } catch (err: any) {
+              return res.status(500).json({ success: false, error: 'Failed to write base64 photo to local disk.' });
+            }
           }
         }
-      } catch (e) {
+      } catch (e: any) {
         console.error('Error processing base64 photo:', e);
+        return res.status(400).json({ success: false, error: 'Malformed base64 photo data.' });
       }
     }
 
+    // 2. Audio Upload Handling
     if (files && files['audio'] && files['audio'][0]) {
       const audioFile = files['audio'][0];
-      let ext = path.extname(audioFile.originalname);
-      if (!ext || ext === '.blob') {
-        if (audioFile.mimetype?.includes('mp4') || audioFile.mimetype?.includes('aac')) ext = '.mp4';
-        else if (audioFile.mimetype?.includes('ogg')) ext = '.ogg';
-        else if (audioFile.mimetype?.includes('wav')) ext = '.wav';
-        else ext = '.webm';
-      }
-      const filename = `audio_${report_code}_${Date.now()}${ext}`;
-      const mimeType = audioFile.mimetype || (ext === '.mp4' ? 'audio/mp4' : 'audio/webm');
+      const { ext, contentType } = getAudioDetails(audioFile);
+      const safeRandom = Math.random().toString(36).slice(2, 8);
+      const filename = `audio_${report_code}_${Date.now()}_${safeRandom}${ext}`;
 
-      // Always upload to Supabase Storage first (persistent cloud URL)
-      const sbUrl = await uploadToSupabaseStorage('emergency-audio', filename, audioFile.buffer, mimeType);
+      const sbUrl = await uploadToSupabaseStorage('emergency-audio', filename, audioFile.buffer, contentType);
       if (sbUrl) {
         audio_url = sbUrl;
+        uploadedAudioKey = filename;
       } else {
-        // Supabase upload failed — write local fallback for dev, but DO NOT store local path in DB for production
-        try { fs.writeFileSync(path.join(uploadsDir, filename), audioFile.buffer); } catch (_) {}
-        console.warn(`[Audio] Supabase upload failed for ${filename}. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars. audio_url will be null.`);
-        audio_url = null;
+        if (isProduction) {
+          if (uploadedPhotoKey) {
+            await deleteFromSupabaseStorage('emergency-images', uploadedPhotoKey);
+          }
+          console.error(`[Audio Upload] Failed to persist emergency audio to Supabase in production: ${filename}`);
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to persist emergency audio recording to cloud storage. Incident report not submitted.'
+          });
+        }
+        // Local dev fallback
+        try {
+          fs.writeFileSync(path.join(uploadsDir, filename), audioFile.buffer);
+          audio_url = `/uploads/emergency/${filename}`;
+          console.log(`[Audio Local Dev Fallback] Persisted to /uploads/emergency/${filename}`);
+        } catch (localErr: any) {
+          console.error('[Audio Local Write Failed]:', localErr);
+          if (uploadedPhotoKey) {
+            await deleteFromSupabaseStorage('emergency-images', uploadedPhotoKey);
+          }
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to write emergency audio to local storage.'
+          });
+        }
       }
     } else if (body.audio_base64) {
       try {
@@ -274,23 +385,47 @@ export async function createReport(req: Request, res: Response) {
           if (mime.includes('mp4') || mime.includes('aac')) ext = '.mp4';
           else if (mime.includes('ogg')) ext = '.ogg';
           else if (mime.includes('wav')) ext = '.wav';
+          else if (mime.includes('mpeg') || mime.includes('mp3')) ext = '.mp3';
 
           const buffer = Buffer.from(matches[2], 'base64');
-          const filename = `audio_${report_code}_${Date.now()}${ext}`;
+          const safeRandom = Math.random().toString(36).slice(2, 8);
+          const filename = `audio_${report_code}_${Date.now()}_${safeRandom}${ext}`;
 
           const sbUrl = await uploadToSupabaseStorage('emergency-audio', filename, buffer, mime || 'audio/webm');
           if (sbUrl) {
             audio_url = sbUrl;
+            uploadedAudioKey = filename;
           } else {
-            try { fs.writeFileSync(path.join(uploadsDir, filename), buffer); } catch (_) {}
-            console.warn(`[Audio base64] Supabase upload failed for ${filename}. audio_url will be null.`);
-            audio_url = null;
+            if (isProduction) {
+              if (uploadedPhotoKey) {
+                await deleteFromSupabaseStorage('emergency-images', uploadedPhotoKey);
+              }
+              return res.status(500).json({
+                success: false,
+                error: 'Failed to persist base64 emergency audio to cloud storage.'
+              });
+            }
+            try {
+              fs.writeFileSync(path.join(uploadsDir, filename), buffer);
+              audio_url = `/uploads/emergency/${filename}`;
+            } catch (err: any) {
+              if (uploadedPhotoKey) {
+                await deleteFromSupabaseStorage('emergency-images', uploadedPhotoKey);
+              }
+              return res.status(500).json({ success: false, error: 'Failed to write base64 audio to local disk.' });
+            }
           }
         }
-      } catch (e) {
+      } catch (e: any) {
         console.error('Error processing base64 audio:', e);
+        if (uploadedPhotoKey) {
+          await deleteFromSupabaseStorage('emergency-images', uploadedPhotoKey);
+        }
+        return res.status(400).json({ success: false, error: 'Malformed base64 audio data.' });
       }
     }
+
+    console.log(`[Emergency SOS Diagnostic] Resolved media for ${report_code} | photo_url: ${photo_url ? 'SAVED' : 'none'} | audio_url: ${audio_url ? 'SAVED' : 'none'}`);
 
     const incident_type = body.incident_type || 'General Emergency';
     const severity = (body.severity || 'HIGH').toUpperCase();
@@ -337,13 +472,24 @@ export async function createReport(req: Request, res: Response) {
       )
     `);
 
-    stmt.run(
-      report_code, incident_type, severity, description,
-      photo_url, audio_url, audio_duration, latitude, longitude, location_address,
-      state, district, city, citizen_name, citizen_phone,
-      user_id, user_email, gps_available,
-      nowIso, initialTimeline, nowIso, nowIso
-    );
+    try {
+      stmt.run(
+        report_code, incident_type, severity, description,
+        photo_url, audio_url, audio_duration, latitude, longitude, location_address,
+        state, district, city, citizen_name, citizen_phone,
+        user_id, user_email, gps_available,
+        nowIso, initialTimeline, nowIso, nowIso
+      );
+    } catch (insertErr: any) {
+      console.error('[Emergency Report Insert Error]:', insertErr);
+      if (uploadedPhotoKey) {
+        await deleteFromSupabaseStorage('emergency-images', uploadedPhotoKey);
+      }
+      if (uploadedAudioKey) {
+        await deleteFromSupabaseStorage('emergency-audio', uploadedAudioKey);
+      }
+      throw insertErr;
+    }
 
     logIncidentAudit(
       report_code,
@@ -406,6 +552,16 @@ export async function deleteReportMedia(req: Request, res: Response) {
     }
 
     const field = mediaType === 'photo' ? 'photo_url' : 'audio_url';
+    const oldUrl = existing[field];
+    if (oldUrl) {
+      if (oldUrl.startsWith('http')) {
+        const bucket = mediaType === 'photo' ? 'emergency-images' : 'emergency-audio';
+        await deleteFromSupabaseStorage(bucket, oldUrl);
+      } else if (oldUrl.startsWith('/uploads/emergency/')) {
+        const localFile = path.join(uploadsDir, path.basename(oldUrl));
+        try { if (fs.existsSync(localFile)) fs.unlinkSync(localFile); } catch (_) {}
+      }
+    }
     db.prepare(`UPDATE emergency_reports SET ${field} = NULL, updated_at = CURRENT_TIMESTAMP WHERE report_code = ?`).run(code);
 
     const updated: any = db.prepare('SELECT * FROM emergency_reports WHERE report_code = ?').get(code);
@@ -933,16 +1089,21 @@ export async function submitOfficerNotes(req: Request, res: Response) {
     // Process uploaded scene photo files
     if (files && files['scene_photos']) {
       for (const file of files['scene_photos']) {
-        const ext = path.extname(file.originalname) || '.jpg';
-        const filename = `scene_${code}_${Date.now()}_${Math.floor(Math.random() * 1000)}${ext}`;
+        const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+        const safeExt = ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext) ? ext : '.jpg';
+        const filename = `scene_${code}_${Date.now()}_${Math.floor(Math.random() * 1000)}${safeExt}`;
         const filepath = path.join(uploadsDir, filename);
-        fs.writeFileSync(filepath, file.buffer);
-        let finalUrl = `/uploads/emergency/${filename}`;
 
-        const sbUrl = await uploadToSupabaseStorage('evidence-files', filename, file.buffer, file.mimetype);
-        if (sbUrl) finalUrl = sbUrl;
-
-        currentScenePhotos.push(finalUrl);
+        const sbUrl = await uploadToSupabaseStorage('evidence-files', filename, file.buffer, file.mimetype || 'image/jpeg');
+        if (sbUrl) {
+          currentScenePhotos.push(sbUrl);
+        } else {
+          if (process.env.NODE_ENV === 'production') {
+            return res.status(500).json({ success: false, error: 'Failed to upload scene evidence photos to cloud storage.' });
+          }
+          fs.writeFileSync(filepath, file.buffer);
+          currentScenePhotos.push(`/uploads/emergency/${filename}`);
+        }
       }
     } else if (body.photo_base64) {
       try {
@@ -950,13 +1111,17 @@ export async function submitOfficerNotes(req: Request, res: Response) {
         if (matches && matches.length === 3) {
           const buffer = Buffer.from(matches[2], 'base64');
           const filename = `scene_${code}_${Date.now()}.jpg`;
-          fs.writeFileSync(path.join(uploadsDir, filename), buffer);
-          let finalUrl = `/uploads/emergency/${filename}`;
 
           const sbUrl = await uploadToSupabaseStorage('evidence-files', filename, buffer, 'image/jpeg');
-          if (sbUrl) finalUrl = sbUrl;
-
-          currentScenePhotos.push(finalUrl);
+          if (sbUrl) {
+            currentScenePhotos.push(sbUrl);
+          } else {
+            if (process.env.NODE_ENV === 'production') {
+              return res.status(500).json({ success: false, error: 'Failed to upload base64 scene photo to cloud storage.' });
+            }
+            fs.writeFileSync(path.join(uploadsDir, filename), buffer);
+            currentScenePhotos.push(`/uploads/emergency/${filename}`);
+          }
         }
       } catch (e) {
         console.error('Error saving base64 scene photo:', e);

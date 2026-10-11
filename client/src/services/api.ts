@@ -248,11 +248,18 @@ export const api = {
   },
 
   getEmergencyStreamUrl: () => `${API_BASE}/emergency/stream`,
-  getMediaUrl: (path: string | null | undefined) => {
-    if (!path) return '';
-    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) return path;
-    const base = API_BASE.replace(/\/api$/, '');
-    return `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+  getMediaUrl: (mediaPath: string | null | undefined): string => {
+    if (!mediaPath) return '';
+    const trimmed = String(mediaPath).trim();
+    if (!trimmed) return '';
+    // Already absolute URL or inline data / blob URI - return untouched directly
+    if (/^(https?:\/\/|data:|blob:)/i.test(trimmed)) {
+      return trimmed;
+    }
+    // Relative local upload URL - resolve against backend API host
+    const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    const base = API_BASE.replace(/\/api\/?$/, '');
+    return `${base}${cleanPath}`;
   },
   getReportByCode: (code: string) => {
     return request<{ success: boolean; report: any }>(`/emergency/reports/${encodeURIComponent(code)}`);

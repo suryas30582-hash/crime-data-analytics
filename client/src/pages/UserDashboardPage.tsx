@@ -785,9 +785,11 @@ export const UserDashboardPage: React.FC = () => {
                             className="max-h-40 w-full object-cover rounded-lg cursor-pointer hover:opacity-95"
                             onError={(e) => {
                               const target = e.currentTarget;
+                              const mediaUrl = api.getMediaUrl(report.photo_url);
+                              console.error('[UserDashboard] Failed to load incident photo:', mediaUrl);
                               target.style.display = 'none';
                               if (target.parentElement) {
-                                target.parentElement.innerHTML = '<div className="p-2 text-[11px] text-[#7A6360]">⚠️ Photo unavailable</div>';
+                                target.parentElement.innerHTML = '<div class="p-2.5 text-xs text-rose-700 bg-rose-50 rounded-lg border border-rose-200"><span>⚠️ Photo could not be displayed</span><br/><a href="' + mediaUrl + '" target="_blank" rel="noreferrer" class="underline font-bold text-[#883A2E] mt-1 inline-block">Open Image Link ↗</a></div>';
                               }
                             }}
                             onClick={() => window.open(api.getMediaUrl(report.photo_url), '_blank')}

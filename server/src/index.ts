@@ -27,9 +27,17 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+import { validateSupabaseConfig, ensureStorageBuckets } from './db/supabase';
+
 // Initialize DB and Seed preloaded Excel datasets
 initDatabase();
 seedDatabase();
+
+// Validate Supabase storage credentials & ensure buckets exist
+validateSupabaseConfig();
+ensureStorageBuckets().catch(err => {
+  console.warn('[Startup] Storage bucket setup check notice:', err?.message || err);
+});
 
 // Mount API routes
 app.use('/api', apiRouter);
@@ -39,10 +47,14 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-// Serve uploaded media with correct MIME headers & byte ranges for browser audio playback
+// Serve uploaded media with correct MIME headers & byte ranges for browser image/audio playback
 const uploadsDir = path.resolve(__dirname, '../../uploads');
+const emergencyUploadsDir = path.resolve(__dirname, '../../uploads/emergency');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+if (!fs.existsSync(emergencyUploadsDir)) {
+  fs.mkdirSync(emergencyUploadsDir, { recursive: true });
 }
 app.use('/uploads', express.static(uploadsDir, {
   setHeaders: (res, filePath) => {
@@ -57,6 +69,16 @@ app.use('/uploads', express.static(uploadsDir, {
       res.setHeader('Content-Type', 'audio/wav');
     } else if (ext === '.mp4' || ext === '.m4a') {
       res.setHeader('Content-Type', 'audio/mp4');
+    } else if (ext === '.aac') {
+      res.setHeader('Content-Type', 'audio/aac');
+    } else if (ext === '.jpg' || ext === '.jpeg') {
+      res.setHeader('Content-Type', 'image/jpeg');
+    } else if (ext === '.png') {
+      res.setHeader('Content-Type', 'image/png');
+    } else if (ext === '.webp') {
+      res.setHeader('Content-Type', 'image/webp');
+    } else if (ext === '.gif') {
+      res.setHeader('Content-Type', 'image/gif');
     }
     res.setHeader('Accept-Ranges', 'bytes');
   }

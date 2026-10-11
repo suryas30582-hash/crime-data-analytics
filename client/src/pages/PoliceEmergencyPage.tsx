@@ -693,8 +693,16 @@ export const PoliceEmergencyPage: React.FC = () => {
                         className="h-36 w-full object-cover group-hover:scale-105 transition-transform"
                         onError={(e) => {
                           const target = e.currentTarget;
-                          target.onerror = null; // prevent infinite loop
-                          target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="%237A6360" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>';
+                          const mediaUrl = api.getMediaUrl(report.photo_url);
+                          console.error('[PoliceEmergencyPage] Error loading evidence photo:', mediaUrl);
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent && !parent.querySelector('.photo-error-badge')) {
+                            const errDiv = document.createElement('div');
+                            errDiv.className = 'photo-error-badge p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 space-y-1';
+                            errDiv.innerHTML = '<div class="font-bold flex items-center gap-1">⚠️ Evidence image failed to load</div><div class="text-[10px] text-rose-600 break-all font-mono">' + mediaUrl + '</div><a href="' + mediaUrl + '" target="_blank" rel="noreferrer" class="inline-block text-[11px] font-bold text-[#883A2E] underline mt-1">Open Direct Link ↗</a>';
+                            parent.appendChild(errDiv);
+                          }
                         }}
                       />
                       <div className="absolute top-2 right-2 flex items-center space-x-1.5 opacity-90 group-hover:opacity-100 transition-opacity">

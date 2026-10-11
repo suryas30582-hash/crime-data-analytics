@@ -72,4 +72,21 @@ cd client
 npm run dev
 ```
 
-Open your browser at `http://localhost:3000` (Dev) or `http://localhost:5000` (Production).
+Open your browser at `http://localhost:5173` (Dev) or `http://localhost:5000` (Production).
+
+---
+
+## ☁️ Emergency Media Flow & Supabase Storage Setup
+
+The platform persists citizen incident evidence (photos, voice recordings, scene evidence) directly into persistent **Supabase Storage buckets**:
+
+1. **`emergency-images`** (Public bucket for SOS citizen photos)
+2. **`emergency-audio`** (Public bucket for citizen voice audio recordings)
+3. **`evidence-files`** (Public bucket for officer scene evidence photos)
+
+### Production Deployment (Render + Vercel)
+
+- **Frontend (Vercel)**: Only interacts with the backend `/api/*` endpoints. Never receives or exposes `SUPABASE_SERVICE_ROLE_KEY`.
+- **Backend (Render)**: Requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `render.yaml` or Render environment settings.
+- **Persistent Storage**: Media files are uploaded by the backend to Supabase Storage with the service-role key, verifying public read URLs that the Police Command Center displays and plays seamlessly.
+- **Local Fallback**: In local development without Supabase credentials, the server safely stores uploads under `/uploads/emergency` and serves them with range-request and audio content-type support.

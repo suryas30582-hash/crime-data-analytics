@@ -576,6 +576,20 @@ export const EmergencyReportPage: React.FC = () => {
                     <span className="text-[#7A6360]">Location Transmitted:</span>
                     <p className="font-medium text-[#2B1F1D] truncate">{submittedReport.location_address}</p>
                   </div>
+                  {(submittedReport.photo_url || submittedReport.audio_url) && (
+                    <div className="col-span-2 flex flex-wrap gap-2 pt-1 border-t border-[#EEDFD9]">
+                      {submittedReport.photo_url && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#883A2E]/10 text-[#883A2E] border border-[#883A2E]/20">
+                          📸 Photo Evidence Uploaded
+                        </span>
+                      )}
+                      {submittedReport.audio_url && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#883A2E]/10 text-[#883A2E] border border-[#883A2E]/20">
+                          🎙️ Voice SOS Attached {submittedReport.audio_duration ? `(${submittedReport.audio_duration}s)` : ''}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div className="col-span-2 pt-1 border-t border-[#EEDFD9]">
                     <span className="text-[#7A6360]">Submission Time (IST):</span>
                     <p className="font-semibold text-[#883A2E]">{formatISTDateTime(submittedReport.created_at || submittedReport.reported_at)}</p>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Volume2, AlertCircle, RotateCcw } from 'lucide-react';
+import { Play, Pause, Volume2, AlertCircle, RotateCcw, ExternalLink } from 'lucide-react';
 import { api } from '../../services/api';
 
 interface IncidentAudioPlayerProps {
@@ -35,6 +35,13 @@ export const IncidentAudioPlayer: React.FC<IncidentAudioPlayerProps> = ({
     setCurrentTime(0);
     setHasError(false);
     setErrorMessage('');
+    if (duration && duration > 0) {
+      setTotalDuration(duration);
+    }
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.load();
+    }
   }, [src]);
 
   const handleLoadedMetadata = () => {
@@ -50,10 +57,17 @@ export const IncidentAudioPlayer: React.FC<IncidentAudioPlayerProps> = ({
 
   const handleTimeUpdate = () => {
     if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
+      const cur = audioRef.current.currentTime;
+      setCurrentTime(cur);
       const d = audioRef.current.duration;
-      if (d && isFinite(d) && !isNaN(d) && d > 0 && (!totalDuration || totalDuration === 0)) {
-        setTotalDuration(d);
+      if (d && isFinite(d) && !isNaN(d) && d > 0) {
+        if (!totalDuration || Math.abs(totalDuration - d) > 1) {
+          setTotalDuration(d);
+        }
+      } else if (duration && duration > 0) {
+        setTotalDuration(duration);
+      } else if (cur > totalDuration) {
+        setTotalDuration(cur);
       }
     }
   };
@@ -69,8 +83,19 @@ export const IncidentAudioPlayer: React.FC<IncidentAudioPlayerProps> = ({
   const handleError = (e: any) => {
     setIsPlaying(false);
     setHasError(true);
-    setErrorMessage('Audio file cannot be loaded or format is unsupported');
-    console.warn('Audio playback error on URL:', fullUrl, e);
+    const mediaError = audioRef.current?.error;
+    let msg = 'Audio file cannot be loaded or format is unsupported';
+    if (mediaError) {
+      if (mediaError.code === 1) msg = 'Audio playback aborted';
+      else if (mediaError.code === 2) msg = 'Network error loading audio';
+      else if (mediaError.code === 3) msg = 'Audio decode error (unsupported codec)';
+      else if (mediaError.code === 4) msg = 'Format not supported by browser';
+    }
+    setErrorMessage(msg);
+    console.error(`[IncidentAudioPlayer] Audio playback error on URL: ${fullUrl}`, {
+      code: mediaError?.code,
+      message: mediaError?.message || e?.message || e
+    });
   };
 
   const togglePlay = async () => {
@@ -83,6 +108,21 @@ export const IncidentAudioPlayer: React.FC<IncidentAudioPlayerProps> = ({
       try {
         setHasError(false);
         setErrorMessage('');
+        await audioRef.current.play();
+        setIsPlaying(true);
+      } catch (err: any) {
+        handleError(err);
+      }
+    }
+  };
+
+  const handleRetry = async () => {
+    setHasError(false);
+    setErrorMessage('');
+    if (audioRef.current) {
+      audioRef.current.src = fullUrl;
+      audioRef.current.load();
+      try {
         await audioRef.current.play();
         setIsPlaying(true);
       } catch (err: any) {
@@ -158,29 +198,27 @@ export const IncidentAudioPlayer: React.FC<IncidentAudioPlayerProps> = ({
           </span>
         </div>
       ) : (
-        <div className="flex items-center space-x-2 text-[10px] text-[#D65A31]">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-          <span>Playback error</span>
+        <div className="flex flex-wrap items-center gap-2 text-[10px] text-[#D65A31] py-0.5">
+          <div className="flex items-center space-x-1">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span className="font-medium">{errorMessage}</span>
+          </div>
           <button
             type="button"
-            onClick={() => {
-              if (audioRef.current) {
-                audioRef.current.load();
-                togglePlay();
-              }
-            }}
-            className="underline font-semibold cursor-pointer"
+            onClick={handleRetry}
+            className="inline-flex items-center space-x-1 underline font-bold cursor-pointer hover:text-[#542A20]"
           >
-            Retry
+            <RotateCcw className="h-3 w-3" />
+            <span>Retry</span>
           </button>
           <a
             href={fullUrl}
             target="_blank"
             rel="noreferrer"
-            download
-            className="underline font-bold text-[#883A2E] ml-1"
+            className="inline-flex items-center space-x-1 underline font-bold text-[#883A2E] hover:text-[#542A20] ml-1"
           >
-            Download Audio
+            <ExternalLink className="h-3 w-3" />
+            <span>Open / Download</span>
           </a>
         </div>
       )}
