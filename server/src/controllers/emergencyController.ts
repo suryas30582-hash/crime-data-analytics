@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../db/schema';
 import { autoDispatchNearestPatrol, calculateHaversineDistance, calculateDynamicETA } from '../services/dispatchService';
 
-import { uploadToSupabaseStorage, deleteFromSupabaseStorage, isSupabaseConfigured } from '../db/supabase';
+import { uploadToSupabaseStorage, deleteFromSupabaseStorage, isSupabaseConfigured, getLastStorageError, supabase } from '../db/supabase';
 import {
   syncEmergencyReportToSupabase,
   syncPatrolAssignmentToSupabase,
@@ -281,10 +281,11 @@ export async function createReport(req: Request, res: Response) {
         uploadedPhotoKey = filename;
       } else {
         if (isProduction) {
-          console.error(`[Photo Upload] Failed to persist emergency photo to Supabase in production: ${filename}`);
+          const detail = getLastStorageError() || 'unknown storage error';
+          console.error(`[Photo Upload] Failed to persist emergency photo to Supabase in production (${detail}): ${filename}`);
           return res.status(500).json({
             success: false,
-            error: 'Failed to persist emergency photo to cloud storage. Incident report not submitted.'
+            error: `Failed to persist emergency photo to cloud storage (${detail}). Incident report not submitted.`
           });
         }
         // Local dev fallback
@@ -354,10 +355,11 @@ export async function createReport(req: Request, res: Response) {
           if (uploadedPhotoKey) {
             await deleteFromSupabaseStorage('emergency-images', uploadedPhotoKey);
           }
-          console.error(`[Audio Upload] Failed to persist emergency audio to Supabase in production: ${filename}`);
+          const detail = getLastStorageError() || 'unknown storage error';
+          console.error(`[Audio Upload] Failed to persist emergency audio to Supabase in production (${detail}): ${filename}`);
           return res.status(500).json({
             success: false,
-            error: 'Failed to persist emergency audio recording to cloud storage. Incident report not submitted.'
+            error: `Failed to persist emergency audio recording to cloud storage (${detail}). Incident report not submitted.`
           });
         }
         // Local dev fallback
@@ -1843,6 +1845,51 @@ export function getStats(req: Request, res: Response) {
   } catch (error: any) {
     console.error('Error fetching emergency stats:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+/**
+ * Storage Diagnostic endpoint for testing Supabase storage connectivity and buckets
+ */
+export async function getStorageDiagnostic(req: Request, res: Response) {
+  try {
+    const isConfigured = isSupabaseConfigured();
+    const hasClient = Boolean(supabase);
+    let listError: any = null;
+    let bucketsList: any = null;
+    if (supabase) {
+      const { data, error } = await supabase.storage.listBuckets();
+      if (error) listError = error.message;
+      else bucketsList = data?.map(b => ({ name: b.name, public: b.public }));
+    }
+    let uploadTest: any = null;
+    let uploadTestError: any = null;
+    let publicUrlTest: any = null;
+    if (supabase) {
+      const testBuf = Buffer.from('diagnostic test ' + Date.now());
+      const diagFile = `diag_${Date.now()}.txt`;
+      const { data, error } = await supabase.storage.from('emergency-images').upload(diagFile, testBuf, { upsert: true });
+      if (error) {
+        uploadTestError = error.message;
+      } else {
+        uploadTest = data;
+        const pub = supabase.storage.from('emergency-images').getPublicUrl(diagFile);
+        publicUrlTest = pub.data.publicUrl;
+      }
+    }
+    res.json({
+      success: true,
+      isConfigured,
+      hasClient,
+      listError,
+      bucketsList,
+      uploadTest,
+      uploadTestError,
+      publicUrlTest,
+      lastStorageError: getLastStorageError()
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message, stack: err.stack });
   }
 }
 

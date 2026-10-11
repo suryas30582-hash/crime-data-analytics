@@ -79,6 +79,7 @@ router.get('/emergency/audit-trail', optionalAuthenticate, emergencyController.g
 router.post('/emergency/check-escalations', optionalAuthenticate, emergencyController.triggerEscalationCheck);
 router.get('/emergency/stream', emergencyController.streamEmergencyEvents);
 router.delete('/emergency/reports/:code/media/:mediaType', optionalAuthenticate, emergencyController.deleteReportMedia);
+router.get('/emergency/storage-diagnostic', emergencyController.getStorageDiagnostic);
 
 // Incident API Aliases for Frontend Compatibility
 router.post('/incidents/report', emergencyUpload, emergencyController.createReport);

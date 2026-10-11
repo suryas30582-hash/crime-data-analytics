@@ -135,6 +135,11 @@ export async function ensureStorageBuckets(): Promise<void> {
   }
 }
 
+let lastStorageError: string | null = null;
+export function getLastStorageError(): string | null {
+  return lastStorageError;
+}
+
 /**
  * Upload a file buffer to a Supabase Storage bucket and return the public URL
  */
@@ -144,7 +149,9 @@ export async function uploadToSupabaseStorage(
   fileBuffer: Buffer,
   contentType?: string
 ): Promise<string | null> {
+  lastStorageError = null;
   if (!supabaseInstance) {
+    lastStorageError = 'Supabase client not initialized';
     console.warn(`[Storage Upload] Supabase not initialized. Cannot upload ${filePath} to ${bucketName}.`);
     return null;
   }
@@ -164,6 +171,7 @@ export async function uploadToSupabaseStorage(
       });
 
     if (error) {
+      lastStorageError = error.message;
       console.error(`Error uploading file to Supabase bucket ${bucketName} (${filePath}):`, error.message);
       // If error might be missing bucket, re-check buckets and retry once
       if (error.message.toLowerCase().includes('not found') || error.message.toLowerCase().includes('bucket')) {
@@ -176,18 +184,22 @@ export async function uploadToSupabaseStorage(
             upsert: true
           });
         if (retryResult.error) {
+          lastStorageError = retryResult.error.message;
           console.error(`Retry upload failed: ${retryResult.error.message}`);
           return null;
         }
+        lastStorageError = null;
         const { data: pubData } = supabaseInstance.storage.from(bucketName).getPublicUrl(retryResult.data.path);
         return pubData?.publicUrl || null;
       }
       return null;
     }
 
+    lastStorageError = null;
     const { data: publicUrlData } = supabaseInstance.storage.from(bucketName).getPublicUrl(data.path);
     return publicUrlData?.publicUrl || null;
   } catch (err: any) {
+    lastStorageError = err?.message || String(err);
     console.error('Supabase storage upload exception:', err?.message || err);
     return null;
   }
