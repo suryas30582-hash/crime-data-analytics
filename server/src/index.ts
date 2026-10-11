@@ -46,7 +46,7 @@ app.use('/api', apiRouter);
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
-    version: '2026-10-11-v4',
+    version: '2026-10-11-v5',
     timestamp: new Date().toISOString(),
     supabaseConfigured: isSupabaseConfigured(),
     hasSupabaseClient: Boolean(supabase)

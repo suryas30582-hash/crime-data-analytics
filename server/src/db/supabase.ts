@@ -15,11 +15,16 @@ const DEFAULT_SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhldGptYWR6YmtoY2Noaml6Z2lkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0Nzc2MzAsImV4cCI6MjEwNjA1MzYzMH0.MSi0RBn3U7c_sqIDfROm986-haXxzM2Vn5ReUllsUfE';
 
 function resolveSupabaseUrl(): string {
-  const envUrl = (process.env.SUPABASE_URL || '').trim();
-  if (envUrl && envUrl.startsWith('http') && !envUrl.includes('your-supabase')) {
-    return envUrl;
+  let envUrl = (process.env.SUPABASE_URL || '').trim();
+  if (!envUrl || !envUrl.startsWith('http') || envUrl.includes('your-supabase')) {
+    envUrl = DEFAULT_SUPABASE_URL;
   }
-  return DEFAULT_SUPABASE_URL;
+  try {
+    const parsed = new URL(envUrl);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return DEFAULT_SUPABASE_URL;
+  }
 }
 
 function resolveServiceRoleKey(): string {
