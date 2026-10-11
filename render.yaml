@@ -16,9 +16,10 @@ services:
       - key: PORT
         value: 5000
       - key: SUPABASE_URL
-        sync: false
+        value: https://hetjmadzbkhcchjizgid.supabase.co
       - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhldGptYWR6YmtoY2Noaml6Z2lkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDQ3NzYzMCwiZXhwIjoyMTA2MDUzNjMwfQ.Qd1r1w3z7TMdpT8eMHSzDGzK872artvfdqbexWy_05w
       - key: SUPABASE_ANON_KEY
-        sync: false
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhldGptYWR6YmtoY2Noaml6Z2lkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0Nzc2MzAsImV4cCI6MjEwNjA1MzYzMH0.MSi0RBn3U7c_sqIDfROm986-haXxzM2Vn5ReUllsUfE
+
 
